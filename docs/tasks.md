@@ -4,26 +4,26 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 
 ## Phase 1 — Foundation
 
-- [ ] Initialize Python project (`pyproject.toml`, FastAPI, uvicorn)
-- [ ] Add `docker-compose.yml` (Postgres 16)
-- [ ] SQLAlchemy models: `User`, `RefreshToken`
-- [ ] Alembic initial migration
-- [ ] `POST /auth/register`, `/login`, `/refresh`, `/logout`
-- [ ] JWT access (15 min) + refresh token hash + rotation
-- [ ] `GET /health`
-- [ ] Auth integration tests
+- [x] Initialize Python project (`pyproject.toml`, FastAPI, uvicorn)
+- [x] Add `docker-compose.yml` (Postgres 16)
+- [x] SQLAlchemy models: `User`, `RefreshToken`
+- [x] Alembic initial migration
+- [x] `POST /auth/register`, `/login`, `/refresh`, `/logout`
+- [x] JWT access (15 min) + refresh token hash + rotation
+- [x] `GET /health`
+- [x] Auth integration tests
 
 ## Phase 2 — Vault + Notes
 
-- [ ] SSNV parser (magic, version, public key extraction)
-- [ ] SSNT parser (magic, note_id, title, updated_at)
-- [ ] Models: `VaultHeader`, `Note`, `NoteBlob`
-- [ ] `GET/PUT /vault/header`
-- [ ] `GET /users/{userId}/public-key`
-- [ ] `GET /notes`, `GET/PUT/DELETE /notes/{noteId}`
-- [ ] etag computation (SHA-256 hex)
-- [ ] `If-Match` conflict → 409
-- [ ] Integration tests
+- [x] SSNV parser (magic, version, public key extraction)
+- [x] SSNT parser (magic, note_id, title, updated_at)
+- [x] Models: `VaultHeader`, `Note`, `NoteBlob`
+- [x] `GET/PUT /vault/header`
+- [x] `GET /users/{userId}/public-key`
+- [x] `GET /notes`, `GET/PUT/DELETE /notes/{noteId}`
+- [x] etag computation (SHA-256 hex)
+- [x] `If-Match` conflict → 409
+- [x] Integration tests
 
 ## Phase 3 — Chunked upload
 
