@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, ForeignKeyConstraint, Integer, LargeBinary, PrimaryKeyConstraint, SmallInteger, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, ForeignKeyConstraint, Integer, LargeBinary, PrimaryKeyConstraint, SmallInteger, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid
@@ -151,3 +151,29 @@ class UploadChunk(Base):
     session: Mapped[UploadSession] = relationship(back_populates="chunks")
 
     __table_args__ = (PrimaryKeyConstraint("upload_id", "chunk_index"),)
+
+
+class NoteShare(Base):
+    __tablename__ = "note_shares"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    recipient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    wrapped_fek: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    shared_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["owner_id", "note_id"],
+            ["notes.user_id", "notes.note_id"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("note_id", "recipient_id"),
+    )

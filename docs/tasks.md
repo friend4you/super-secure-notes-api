@@ -36,13 +36,13 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 
 ## Phase 4 — Sharing
 
-- [ ] Model: `NoteShare`
-- [ ] `POST /notes/{noteId}/share`
-- [ ] `DELETE /notes/{noteId}/share/{email}`
-- [ ] `GET /notes/shared`
-- [ ] `GET /notes/shared/{noteId}`
-- [ ] `DELETE /notes/shared/{noteId}`
-- [ ] Integration tests
+- [x] Model: `NoteShare`
+- [x] `POST /notes/{noteId}/share`
+- [x] `DELETE /notes/{noteId}/share/{email}`
+- [x] `GET /notes/shared`
+- [x] `GET /notes/shared/{noteId}`
+- [x] `DELETE /notes/shared/{noteId}`
+- [x] Integration tests
 
 ## Phase 5 — Polish
 
