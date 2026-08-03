@@ -24,7 +24,7 @@ from app.notes.schemas import (
 )
 from app.notes.service import persist_note_blob
 
-router = APIRouter(prefix="/notes", tags=["notes"])
+router = APIRouter(prefix="/notes", tags=["uploads"])
 
 
 def _expected_chunk_size(session: UploadSession, chunk_index: int) -> int:
@@ -106,7 +106,12 @@ async def _get_upload_session(
     return session
 
 
-@router.post("/{note_id}/uploads", response_model=InitUploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{note_id}/uploads",
+    response_model=InitUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Initiate chunked upload",
+)
 async def init_upload(
     note_id: UUID,
     body: InitUploadRequest,
@@ -146,6 +151,7 @@ async def init_upload(
 @router.put(
     "/{note_id}/uploads/{upload_id}/chunks/{chunk_index}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Upload a single chunk",
 )
 async def upload_chunk(
     note_id: UUID,
@@ -192,6 +198,7 @@ async def upload_chunk(
 @router.post(
     "/{note_id}/uploads/{upload_id}/complete",
     response_model=NoteUploadResponse,
+    summary="Complete chunked upload",
 )
 async def complete_upload(
     note_id: UUID,

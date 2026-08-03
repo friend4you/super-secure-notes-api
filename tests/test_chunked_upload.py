@@ -3,15 +3,13 @@ import uuid
 import pytest
 
 from app.notes.constants import CHUNK_SIZE_BYTES
-from tests.fixtures import make_large_note_blob
+from tests.support import large_note_blob, register_user
 
 
 @pytest.fixture
 async def auth_headers(client, credentials):
-    response = await client.post("/v1/auth/register", json=credentials)
-    assert response.status_code == 201
-    token = response.json()["accessToken"]
-    return {"Authorization": f"Bearer {token}"}
+    user = await register_user(client, credentials["email"], credentials["password"])
+    return user["headers"]
 
 
 @pytest.mark.asyncio
@@ -29,7 +27,7 @@ async def test_init_upload_rejects_small_size(client, auth_headers):
 @pytest.mark.asyncio
 async def test_chunked_upload_completes_large_note(client, auth_headers):
     note_id = uuid.UUID("550e8400-e29b-41d4-a716-446655440001")
-    blob = make_large_note_blob(note_id=note_id)
+    blob = large_note_blob(note_id=note_id)
     assert len(blob) > 10_485_760
 
     init = await client.post(
@@ -74,7 +72,7 @@ async def test_chunked_upload_completes_large_note(client, auth_headers):
 @pytest.mark.asyncio
 async def test_new_upload_aborts_previous_session(client, auth_headers):
     note_id = uuid.UUID("550e8400-e29b-41d4-a716-446655440003")
-    blob = make_large_note_blob(note_id=note_id)
+    blob = large_note_blob(note_id=note_id)
 
     first = await client.post(
         f"/v1/notes/{note_id}/uploads",

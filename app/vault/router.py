@@ -1,5 +1,4 @@
 import base64
-import hashlib
 from typing import Annotated
 from uuid import UUID
 
@@ -23,7 +22,7 @@ class PublicKeyResponse(BaseModel):
     algorithmId: int
 
 
-@router.get("/vault/header")
+@router.get("/vault/header", summary="Download vault header blob")
 async def get_vault_header(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -36,7 +35,7 @@ async def get_vault_header(
     return Response(content=header.header_data, media_type="application/octet-stream")
 
 
-@router.put("/vault/header", status_code=status.HTTP_204_NO_CONTENT)
+@router.put("/vault/header", status_code=status.HTTP_204_NO_CONTENT, summary="Upload or replace vault header")
 async def put_vault_header(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -76,7 +75,7 @@ async def put_vault_header(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/users/{user_id}/public-key", response_model=PublicKeyResponse)
+@router.get("/users/{user_id}/public-key", response_model=PublicKeyResponse, summary="Fetch user identity public key")
 async def get_public_key(
     user_id: UUID,
     _: Annotated[User, Depends(get_current_user)],

@@ -1,37 +1,8 @@
 import base64
-import uuid
 
 import pytest
 
-from tests.fixtures import make_note_blob
-
-WRAPPED_FEK_B64 = base64.b64encode(bytes([0xAB] * 60)).decode("ascii")
-
-
-async def register_user(client, email: str, password: str = "secret-password") -> dict:
-    response = await client.post(
-        "/v1/auth/register",
-        json={"email": email, "password": password},
-    )
-    assert response.status_code == 201
-    body = response.json()
-    return {
-        "headers": {"Authorization": f"Bearer {body['accessToken']}"},
-        "user_id": body["user"]["id"],
-        "email": body["user"]["email"],
-    }
-
-
-async def create_note(client, headers: dict, note_id: uuid.UUID | None = None) -> tuple[uuid.UUID, bytes]:
-    note_id = note_id or uuid.uuid4()
-    blob = make_note_blob(note_id=note_id)
-    response = await client.put(
-        f"/v1/notes/{note_id}",
-        headers={**headers, "Content-Type": "application/octet-stream"},
-        content=blob,
-    )
-    assert response.status_code == 200
-    return note_id, blob
+from tests.support import WRAPPED_FEK_B64, create_note, register_user
 
 
 @pytest.mark.asyncio

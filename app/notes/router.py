@@ -16,7 +16,7 @@ from app.notes.service import get_active_note, persist_note_blob
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
-@router.get("", response_model=list[NoteSummaryResponse])
+@router.get("", response_model=list[NoteSummaryResponse], summary="List owned notes")
 async def list_notes(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -41,7 +41,7 @@ async def list_notes(
     ]
 
 
-@router.get("/{note_id}")
+@router.get("/{note_id}", summary="Download note blob")
 async def get_note(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
@@ -68,7 +68,7 @@ async def get_note(
     )
 
 
-@router.put("/{note_id}", response_model=NoteUploadResponse)
+@router.put("/{note_id}", response_model=NoteUploadResponse, summary="Upload or replace note (≤ 10 MB)")
 async def put_note(
     note_id: UUID,
     request: Request,
@@ -87,7 +87,7 @@ async def put_note(
     return await persist_note_blob(db, user.id, note_id, body, if_match)
 
 
-@router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Soft-delete a note")
 async def delete_note(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],

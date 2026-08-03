@@ -46,6 +46,6 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 
 ## Phase 5 — Polish
 
-- [ ] OpenAPI tags and descriptions
-- [ ] README run instructions verified
-- [ ] E2E acceptance scenarios from SPEC §9
+- [x] OpenAPI tags and descriptions
+- [x] README run instructions verified
+- [x] E2E acceptance scenarios from SPEC §9

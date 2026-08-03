@@ -15,9 +15,44 @@ from app.errors import APIError
 
 logger = logging.getLogger(__name__)
 
+OPENAPI_TAGS = [
+    {
+        "name": "auth",
+        "description": "Account registration, login, JWT access tokens, and refresh token rotation.",
+    },
+    {
+        "name": "vault",
+        "description": "Opaque vault header storage and identity public key lookup for sharing.",
+    },
+    {
+        "name": "notes",
+        "description": "Note index and blob CRUD for the authenticated owner.",
+    },
+    {
+        "name": "uploads",
+        "description": "Chunked upload sessions for note blobs larger than 10 MB.",
+    },
+    {
+        "name": "sharing",
+        "description": "Read-only note sharing between users via wrapped FEK grants.",
+    },
+    {
+        "name": "health",
+        "description": "Service health checks.",
+    },
+]
+
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="super-secure-notes-api", version="0.1.0")
+    app = FastAPI(
+        title="super-secure-notes-api",
+        version="1.0.0",
+        description=(
+            "REST backend for the superSecureNotes encrypted notes app. "
+            "Stores opaque vault headers and note blobs only — no decryption on the server."
+        ),
+        openapi_tags=OPENAPI_TAGS,
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -55,8 +90,9 @@ def create_app() -> FastAPI:
             content={"error": "validation_error", "message": "Invalid request body."},
         )
 
-    @app.get("/health")
+    @app.get("/health", tags=["health"], summary="Health check")
     async def health() -> dict[str, str]:
+        """Returns 200 when the API process is running."""
         return {"status": "ok"}
 
     app.include_router(auth_router, prefix="/v1")

@@ -42,7 +42,7 @@ async def _get_recipient_share(
     return result.scalar_one_or_none()
 
 
-@router.get("/shared", response_model=list[SharedNoteSummaryResponse])
+@router.get("/shared", response_model=list[SharedNoteSummaryResponse], summary="List notes shared with me")
 async def list_shared_notes(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -75,7 +75,7 @@ async def list_shared_notes(
     ]
 
 
-@router.get("/shared/{note_id}", response_model=SharedNoteDownloadResponse)
+@router.get("/shared/{note_id}", response_model=SharedNoteDownloadResponse, summary="Download shared note")
 async def get_shared_note(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
@@ -102,7 +102,7 @@ async def get_shared_note(
     )
 
 
-@router.delete("/shared/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/shared/{note_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Remove shared note from my list")
 async def remove_shared_note(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
@@ -121,6 +121,7 @@ async def remove_shared_note(
     "/{note_id}/share",
     response_model=ShareNoteResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Share note with another user",
 )
 async def share_note(
     note_id: UUID,
@@ -170,7 +171,11 @@ async def share_note(
     )
 
 
-@router.delete("/{note_id}/share/{recipient_email}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{note_id}/share/{recipient_email}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke note share",
+)
 async def revoke_share(
     note_id: UUID,
     recipient_email: EmailStr,

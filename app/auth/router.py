@@ -37,7 +37,12 @@ def _auth_response(user: User, access_token: str, refresh_token: str) -> AuthSuc
     )
 
 
-@router.post("/register", response_model=AuthSuccessResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=AuthSuccessResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new account",
+)
 async def register(
     body: CredentialsRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -59,7 +64,7 @@ async def register(
     return _auth_response(user, access_token, refresh_token)
 
 
-@router.post("/login", response_model=AuthSuccessResponse)
+@router.post("/login", response_model=AuthSuccessResponse, summary="Log in with email and password")
 async def login(
     body: CredentialsRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -77,7 +82,7 @@ async def login(
     return _auth_response(user, access_token, refresh_token)
 
 
-@router.post("/refresh", response_model=RefreshResponse)
+@router.post("/refresh", response_model=RefreshResponse, summary="Rotate refresh token")
 async def refresh(
     body: RefreshRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -90,7 +95,7 @@ async def refresh(
     )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Log out and revoke refresh tokens")
 async def logout(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
