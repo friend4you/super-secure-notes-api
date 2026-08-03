@@ -27,12 +27,12 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 
 ## Phase 3 — Chunked upload
 
-- [ ] Models: `UploadSession`, `UploadChunk`
-- [ ] `POST /notes/{noteId}/uploads`
-- [ ] `PUT .../chunks/{chunkIndex}`
-- [ ] `POST .../complete`
-- [ ] Session expiry cleanup
-- [ ] Integration tests (>10 MB flow)
+- [x] Models: `UploadSession`, `UploadChunk`
+- [x] `POST /notes/{noteId}/uploads`
+- [x] `PUT .../chunks/{chunkIndex}`
+- [x] `POST .../complete`
+- [x] Session expiry cleanup
+- [x] Integration tests (>10 MB flow)
 
 ## Phase 4 — Sharing
 

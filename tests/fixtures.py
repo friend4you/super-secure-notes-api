@@ -39,8 +39,10 @@ def make_note_blob(
     note_id: uuid.UUID | None = None,
     title: str = "My note",
     updated_at: int = 1_700_000_100,
+    encrypted_payload: bytes | None = None,
 ) -> bytes:
     note_id = note_id or uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+    payload = encrypted_payload if encrypted_payload is not None else bytes([0xCD] * 128)
     buffer = bytearray()
     buffer.extend(b"SSNT")
     buffer.append(1)  # version
@@ -51,5 +53,20 @@ def make_note_blob(
     _append_u32_be(buffer, 0)  # attachment_count
     _append_u64_be(buffer, 0)  # attachments_total_size
     _append_length_prefixed_bytes(buffer, bytes([0xAB] * 60))
-    _append_length_prefixed_bytes(buffer, bytes([0xCD] * 128))
+    _append_length_prefixed_bytes(buffer, payload)
     return bytes(buffer)
+
+
+def make_large_note_blob(
+    note_id: uuid.UUID | None = None,
+    target_size: int = 12_582_912,
+) -> bytes:
+    note_id = note_id or uuid.UUID("550e8400-e29b-41d4-a716-446655440001")
+    small = make_note_blob(note_id=note_id, title="Large note")
+    overhead = len(small) - 128
+    payload_size = target_size - overhead
+    return make_note_blob(
+        note_id=note_id,
+        title="Large note",
+        encrypted_payload=bytes([0xEE]) * payload_size,
+    )

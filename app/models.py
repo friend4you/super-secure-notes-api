@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, ForeignKeyConstraint, LargeBinary, PrimaryKeyConstraint, SmallInteger, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, ForeignKeyConstraint, Integer, LargeBinary, PrimaryKeyConstraint, SmallInteger, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid
@@ -29,6 +29,9 @@ class User(Base):
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     notes: Mapped[list["Note"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    upload_sessions: Mapped[list["UploadSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class RefreshToken(Base):
@@ -108,3 +111,43 @@ class NoteBlob(Base):
             ondelete="CASCADE",
         ),
     )
+
+
+class UploadSession(Base):
+    __tablename__ = "upload_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    total_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    chunk_size: Mapped[int] = mapped_column(Integer, nullable=False, default=5_242_880)
+    received_chunks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expected_chunks: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="in_progress")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    user: Mapped[User] = relationship(back_populates="upload_sessions")
+    chunks: Mapped[list["UploadChunk"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+
+
+class UploadChunk(Base):
+    __tablename__ = "upload_chunks"
+
+    upload_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("upload_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    session: Mapped[UploadSession] = relationship(back_populates="chunks")
+
+    __table_args__ = (PrimaryKeyConstraint("upload_id", "chunk_index"),)

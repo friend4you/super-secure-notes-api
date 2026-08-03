@@ -15,7 +15,7 @@ The server stores **opaque encrypted blobs** only. It never holds vault keys, no
 
 ## Status
 
-**Phases 1–2 implemented** — auth, vault, notes CRUD, health check, Docker Compose, Alembic migrations.
+**Phases 1–3 implemented** — auth, vault, notes CRUD, chunked upload (>10 MB), Docker Compose, Alembic migrations.
 
 ```bash
 docker compose up
