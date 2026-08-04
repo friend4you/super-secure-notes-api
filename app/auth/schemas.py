@@ -16,7 +16,7 @@ class RefreshRequest(BaseModel):
 class UserResponse(BaseModel):
     id: UUID
     email: str
-    createdAt: datetime
+    createdAt: datetime = Field(validation_alias="created_at")
 
     model_config = {"from_attributes": True}
 
