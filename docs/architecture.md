@@ -41,7 +41,7 @@ The backend stores one **opaque** `vault.meta` blob per user (`BYTEA`). The blob
 | Field | Server sees |
 |-------|-------------|
 | PBKDF2 params, wrapped UDK | Opaque bytes |
-| `identity_public_key` (32 bytes) | Extracted on `PUT` for index + `GET /users/{id}/public-key` |
+| `identity_public_key` (32 bytes) | Extracted on `PUT` for index + `GET /users/public-key?email=` |
 | `wrapped_identity_private_key` | Opaque bytes |
 
 Server **never** unwraps UDK or identity private key.

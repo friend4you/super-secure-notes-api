@@ -124,7 +124,15 @@ Server validates `SSNV` magic, extracts `identity_public_key` (v2) into `vault_h
 
 ---
 
-### `GET /users/{userId}/public-key`
+### `GET /users/public-key`
+
+Fetch a user's identity public key by email (for wrapping FEK before share).
+
+**Query parameters:**
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `email` | yes | Recipient email address |
 
 **Response `200 OK`:**
 ```json
@@ -136,7 +144,7 @@ Server validates `SSNV` magic, extracts `identity_public_key` (v2) into `vault_h
 
 `algorithmId` `1` = Curve25519 (X25519).
 
-**Errors:** `401 unauthorized`, `404 public_key_not_found`
+**Errors:** `401 unauthorized`, `400 validation_error`, `404 user_not_found`, `404 public_key_not_found`
 
 ---
 
@@ -403,7 +411,7 @@ Recipient removes themselves from the share (deletes `note_shares` row).
 | `header_not_found` | 404 | vault |
 | `public_key_not_found` | 404 | vault |
 | `note_not_found` | 404 | notes |
-| `user_not_found` | 404 | share |
+| `user_not_found` | 404 | share, vault |
 | `share_not_found` | 404 | share |
 | `already_shared` | 409 | share |
 | `conflict` | 409 | notes PUT / upload complete |

@@ -17,7 +17,7 @@ async def auth_headers(client, credentials):
 
 @pytest.mark.asyncio
 async def test_vault_header_flow(client, auth_headers):
-    headers, user_id = auth_headers
+    headers, _ = auth_headers
     missing = await client.get("/v1/vault/header", headers=headers)
     assert missing.status_code == 404
     assert missing.json()["error"] == "header_not_found"
@@ -34,9 +34,59 @@ async def test_vault_header_flow(client, auth_headers):
     assert got.status_code == 200
     assert got.content == vault_bytes
 
-    pubkey = await client.get(f"/v1/users/{user_id}/public-key", headers=headers)
+    pubkey = await client.get(
+        f"/v1/users/public-key?email=alice@example.com",
+        headers=headers,
+    )
     assert pubkey.status_code == 200
     assert pubkey.json()["algorithmId"] == 1
+
+
+@pytest.mark.asyncio
+async def test_public_key_by_email(client, credentials):
+    from tests.support import register_user, vault_header_bytes
+
+    alice = await register_user(client, credentials["email"], credentials["password"])
+    bob = await register_user(client, "bob@example.com")
+
+    missing_user = await client.get(
+        "/v1/users/public-key?email=unknown@example.com",
+        headers=alice["headers"],
+    )
+    assert missing_user.status_code == 404
+    assert missing_user.json()["error"] == "user_not_found"
+
+    no_key = await client.get(
+        "/v1/users/public-key?email=bob@example.com",
+        headers=alice["headers"],
+    )
+    assert no_key.status_code == 404
+    assert no_key.json()["error"] == "public_key_not_found"
+
+    put = await client.put(
+        "/v1/vault/header",
+        headers={**bob["headers"], "Content-Type": "application/octet-stream"},
+        content=vault_header_bytes(),
+    )
+    assert put.status_code == 204
+
+    got = await client.get(
+        "/v1/users/public-key?email=Bob@Example.com",
+        headers=alice["headers"],
+    )
+    assert got.status_code == 200
+    assert got.json()["algorithmId"] == 1
+
+    no_email = await client.get("/v1/users/public-key", headers=alice["headers"])
+    assert no_email.status_code == 400
+    assert no_email.json()["error"] == "validation_error"
+
+    bad_email = await client.get(
+        "/v1/users/public-key?email=not-an-email",
+        headers=alice["headers"],
+    )
+    assert bad_email.status_code == 400
+    assert bad_email.json()["error"] == "validation_error"
 
 
 @pytest.mark.asyncio

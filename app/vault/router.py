@@ -1,9 +1,8 @@
 import base64
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +12,7 @@ from app.errors import APIError
 from app.models import User, VaultHeader
 from app.parsers.buffer import ParseError
 from app.parsers.ssnv import parse_vault_header
+from app.users.service import find_user_by_email
 
 router = APIRouter(tags=["vault"])
 
@@ -75,13 +75,17 @@ async def put_vault_header(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/users/{user_id}/public-key", response_model=PublicKeyResponse, summary="Fetch user identity public key")
-async def get_public_key(
-    user_id: UUID,
+@router.get("/users/public-key", response_model=PublicKeyResponse, summary="Fetch user identity public key by email")
+async def get_public_key_by_email(
+    email: Annotated[EmailStr, Query()],
     _: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PublicKeyResponse:
-    result = await db.execute(select(VaultHeader).where(VaultHeader.user_id == user_id))
+    recipient = await find_user_by_email(db, str(email))
+    if recipient is None:
+        raise APIError(404, "user_not_found", "Recipient user not found.")
+
+    result = await db.execute(select(VaultHeader).where(VaultHeader.user_id == recipient.id))
     header = result.scalar_one_or_none()
     if header is None:
         raise APIError(404, "public_key_not_found", "Public key not found.")

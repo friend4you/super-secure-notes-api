@@ -4,13 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
 from pydantic import EmailStr
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.errors import APIError
 from app.models import Note, NoteBlob, NoteShare, User
+from app.users.service import find_user_by_email
 from app.notes.service import get_active_note
 from app.shares.schemas import (
     ShareNoteRequest,
@@ -21,13 +22,6 @@ from app.shares.schemas import (
 )
 
 router = APIRouter(prefix="/notes", tags=["sharing"])
-
-
-async def _find_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(
-        select(User).where(func.lower(User.email) == email.lower())
-    )
-    return result.scalar_one_or_none()
 
 
 async def _get_recipient_share(
@@ -133,7 +127,7 @@ async def share_note(
     if note is None:
         raise APIError(404, "note_not_found", "Note not found.")
 
-    recipient = await _find_user_by_email(db, body.recipientEmail)
+    recipient = await find_user_by_email(db, body.recipientEmail)
     if recipient is None:
         raise APIError(404, "user_not_found", "Recipient user not found.")
 
@@ -182,7 +176,7 @@ async def revoke_share(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    recipient = await _find_user_by_email(db, str(recipient_email))
+    recipient = await find_user_by_email(db, str(recipient_email))
     if recipient is None:
         raise APIError(404, "share_not_found", "Share not found.")
 

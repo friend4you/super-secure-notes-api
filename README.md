@@ -76,7 +76,7 @@ All routes are under `/v1`. Authenticated endpoints require `Authorization: Bear
 | Tag | Endpoints |
 |-----|-----------|
 | **auth** | `POST /auth/register`, `/login`, `/refresh`, `/logout` |
-| **vault** | `GET/PUT /vault/header`, `GET /users/{userId}/public-key` |
+| **vault** | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
 | **notes** | `GET /notes`, `GET/PUT/DELETE /notes/{noteId}` |
 | **uploads** | Chunked upload for blobs > 10 MB |
 | **sharing** | Read-only note sharing by recipient email |

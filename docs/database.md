@@ -79,7 +79,7 @@ CREATE TABLE vault_headers (
 );
 ```
 
-`public_key` is extracted on `PUT /vault/header` so `GET /users/{id}/public-key` does not re-parse the blob.
+`public_key` is extracted on `PUT /vault/header` so `GET /users/public-key?email=` does not re-parse the blob.
 
 ---
 

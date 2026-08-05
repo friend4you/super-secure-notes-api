@@ -19,7 +19,7 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 - [x] SSNT parser (magic, note_id, title, updated_at)
 - [x] Models: `VaultHeader`, `Note`, `NoteBlob`
 - [x] `GET/PUT /vault/header`
-- [x] `GET /users/{userId}/public-key`
+- [x] `GET /users/public-key?email=`
 - [x] `GET /notes`, `GET/PUT/DELETE /notes/{noteId}`
 - [x] etag computation (SHA-256 hex)
 - [x] `If-Match` conflict → 409

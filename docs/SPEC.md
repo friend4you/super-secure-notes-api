@@ -36,7 +36,7 @@ The server **must not** decrypt vault keys, note payloads, or FEKs.
 | Client | Endpoints |
 |--------|-----------|
 | `AuthAPIClient` | `POST /auth/register`, `/login`, `/logout`, `/refresh` |
-| `VaultAPIClient` | `GET/PUT /vault/header`, `GET /users/{userId}/public-key` |
+| `VaultAPIClient` | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
 | `NoteAPIClient` | `GET /notes`, `GET/PUT/DELETE /notes/{noteId}` |
 
 Base path: `/v1` (e.g. `https://api.example.com/v1`).
