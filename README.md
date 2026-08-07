@@ -2,7 +2,7 @@
 
 Python REST API for [superSecureNotes](https://github.com/) — the iOS/macOS encrypted notes app.
 
-The server stores **opaque encrypted blobs** only. It never holds vault keys, note FEKs, or decrypted content. Account passwords are hashed for login; vault crypto stays on the client.
+The server stores **opaque encrypted bytes** only (vault headers, note bodies, attachments). It never holds vault keys, note FEKs, or decrypted content. Account passwords are hashed for login; vault crypto stays on the client.
 
 ## Documentation
 
@@ -77,9 +77,9 @@ All routes are under `/v1`. Authenticated endpoints require `Authorization: Bear
 |-----|-----------|
 | **auth** | `POST /auth/register`, `/login`, `/refresh`, `/logout` |
 | **vault** | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
-| **notes** | `GET /notes`, `GET/PUT/DELETE /notes/{noteId}` |
-| **uploads** | Chunked upload for blobs > 10 MB |
-| **sharing** | Read-only note sharing by recipient email |
+| **notes** | `GET /notes`, `GET/PUT /notes/{noteId}/body`, `DELETE /notes/{noteId}`, attachment CRUD |
+| **uploads** | Chunked upload for attachments > 10 MB |
+| **sharing** | Read-only note sharing (body + lazy attachments) |
 
 ## Related repository
 

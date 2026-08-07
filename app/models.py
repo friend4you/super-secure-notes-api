@@ -89,6 +89,9 @@ class Note(Base):
     blob: Mapped["NoteBlob | None"] = relationship(
         back_populates="note", uselist=False, cascade="all, delete-orphan"
     )
+    attachments: Mapped[list["NoteAttachment"]] = relationship(
+        back_populates="note", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (PrimaryKeyConstraint("user_id", "note_id"),)
 
@@ -113,6 +116,30 @@ class NoteBlob(Base):
     )
 
 
+class NoteAttachment(Base):
+    __tablename__ = "note_attachments"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    attachment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    etag: Mapped[str] = mapped_column(Text, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    note: Mapped[Note] = relationship(back_populates="attachments")
+
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "note_id", "attachment_id"),
+        ForeignKeyConstraint(
+            ["user_id", "note_id"],
+            ["notes.user_id", "notes.note_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
 class UploadSession(Base):
     __tablename__ = "upload_sessions"
 
@@ -123,6 +150,7 @@ class UploadSession(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    attachment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     total_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     chunk_size: Mapped[int] = mapped_column(Integer, nullable=False, default=5_242_880)
     received_chunks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

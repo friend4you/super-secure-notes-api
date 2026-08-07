@@ -162,36 +162,40 @@ List current user's notes (not shared-with-me).
     "title": "My note",
     "updatedAt": 1700000000,
     "syncState": "synced",
-    "etag": "a1b2c3..."
+    "etag": "a1b2c3...",
+    "attachmentCount": 2,
+    "attachmentsTotalSize": 5242880
   }
 ]
 ```
+
+`etag` is the **composite** note etag (body + attachments). `attachmentCount` / `attachmentsTotalSize` are derived from `note_attachments` rows.
 
 Includes soft-deleted notes only when `?includeDeleted=true` (for sync; mobile catch-up).
 
 **Errors:** `401 unauthorized`
 
-> **Mobile compatibility:** Current `NoteAPIClient` decodes `noteId`, `title`, `updatedAt` only. Extra fields are ignored by older clients.
-
 ---
 
-### `GET /notes/{noteId}`
+### `GET /notes/{noteId}/body`
+
+Download note body SSNT only (no attachment bytes).
 
 **Response `200 OK`**
-- Body: raw `.note` blob (`Content-Type: application/octet-stream`)
-- Header: `ETag: "<etag>"`
+- Body: raw body SSNT (`Content-Type: application/octet-stream`)
+- Header: `ETag: "<body_etag>"` (SHA-256 of body bytes — not the composite note etag)
 
 **Errors:** `401 unauthorized`, `404 note_not_found`
 
 ---
 
-### `PUT /notes/{noteId}`
+### `PUT /notes/{noteId}/body`
 
-Upload or replace note. Use when blob size **≤ 10 MB**.
+Upload or replace note body. Body size must be **≤ 10 MB**.
 
 **Request:**
-- Body: raw `.note` blob
-- Optional: `If-Match: "<etag>"` for conflict detection
+- Body: raw body SSNT (no trailing attachment bytes)
+- Optional: `If-Match: "<composite_etag>"` for conflict detection
 
 **Response `200 OK`:**
 ```json
@@ -202,24 +206,25 @@ Upload or replace note. Use when blob size **≤ 10 MB**.
 }
 ```
 
-> **Mobile compatibility:** Current client expects `204`. Mobile update required to read sync response.
+`etag` / `updatedAt` are composite sync metadata.
 
 **Server:**
-1. Validate `SSNT` magic
+1. Validate `SSNT` magic, reject trailing bytes after `encrypted_payload`
 2. Verify path `noteId` matches header `note_id`
 3. Extract `title`, `updated_at` for index
-4. Store blob; compute `etag` (SHA-256 of blob, hex)
+4. Validate SSNT `attachment_count` / `attachments_total_size` match `note_attachments`
+5. Store body; recompute composite `etag`
 
 **Errors:**
 - `401 unauthorized`
-- `400 validation_error` (invalid blob, ID mismatch, empty body)
-- `409 conflict` (`If-Match` does not match current etag)
+- `400 validation_error` (invalid blob, ID mismatch, empty body, size > 10 MB, manifest mismatch)
+- `409 conflict` (`If-Match` does not match current composite etag)
 
 ---
 
 ### `DELETE /notes/{noteId}`
 
-Soft delete: sets `deleted_at`, removes blob optionally (or keeps for recovery window — recommend hard delete blob, keep tombstone in `notes`).
+Soft delete: sets `deleted_at`, hard-deletes body and attachments (tombstone remains in `notes`).
 
 **Response `204 No Content`**
 
@@ -227,15 +232,89 @@ Soft delete: sets `deleted_at`, removes blob optionally (or keeps for recovery w
 
 ---
 
-## Chunked upload (> 10 MB)
+## Attachments (owner)
+
+### `GET /notes/{noteId}/attachments`
+
+List attachment manifest (metadata only, no bytes).
+
+**Response `200 OK`:**
+```json
+[
+  {
+    "attachmentId": "660e8400-e29b-41d4-a716-446655440010",
+    "sizeBytes": 2048,
+    "etag": "d4e5f6...",
+    "updatedAt": 1700000100,
+    "contentType": "image/jpeg"
+  }
+]
+```
+
+`contentType` is omitted when not set.
+
+**Errors:** `401 unauthorized`, `404 note_not_found`
+
+---
+
+### `GET /notes/{noteId}/attachments/{attachmentId}`
+
+**Response `200 OK`**
+- Body: opaque encrypted bytes (`Content-Type: application/octet-stream`)
+- Header: `ETag: "<attachment_etag>"`
+
+**Errors:** `401 unauthorized`, `404 note_not_found`, `404 attachment_not_found`
+
+---
+
+### `PUT /notes/{noteId}/attachments/{attachmentId}`
+
+Upload or replace attachment when size **≤ 10 MB**.
+
+**Request:**
+- Body: opaque encrypted bytes
+- Optional query: `contentType` (plaintext metadata for UI placeholders)
+- Optional: `If-Match: "<attachment_etag>"`
+
+**Response `200 OK`:**
+```json
+{
+  "attachmentId": "660e8400-e29b-41d4-a716-446655440010",
+  "sizeBytes": 2048,
+  "etag": "d4e5f6...",
+  "updatedAt": 1700000100,
+  "noteEtag": "a1b2c3...",
+  "contentType": "image/jpeg"
+}
+```
+
+Recomputes composite note etag. `updatedAt` is server Unix seconds.
+
+**Errors:** `400 validation_error` (empty body, size > 10 MB), `404 note_not_found`, `409 conflict`
+
+---
+
+### `DELETE /notes/{noteId}/attachments/{attachmentId}`
+
+**Response `204 No Content`**
+
+Recomputes composite note etag.
+
+**Errors:** `401 unauthorized`, `404 note_not_found`, `404 attachment_not_found`
+
+---
+
+## Chunked upload (attachments > 10 MB)
 
 Constants:
 - `CHUNK_THRESHOLD_BYTES` = 10_485_760 (10 MB)
 - `CHUNK_SIZE_BYTES` = 5_242_880 (5 MB)
 
-### `POST /notes/{noteId}/uploads`
+Note bodies always use simple PUT (≤ 10 MB). Chunked flow is **per attachment** only.
 
-Initiate chunked upload.
+### `POST /notes/{noteId}/attachments/{attachmentId}/uploads`
+
+Initiate chunked attachment upload. Note must already exist.
 
 **Request:**
 ```json
@@ -254,11 +333,11 @@ Initiate chunked upload.
 }
 ```
 
-**Errors:** `400 validation_error` (totalSize ≤ 10 MB — use simple PUT instead)
+**Errors:** `400 validation_error` (totalSize ≤ 10 MB — use simple PUT instead), `404 note_not_found`
 
 ---
 
-### `PUT /notes/{noteId}/uploads/{uploadId}/chunks/{chunkIndex}`
+### `PUT /notes/{noteId}/attachments/{attachmentId}/uploads/{uploadId}/chunks/{chunkIndex}`
 
 **Request:** raw bytes for this chunk (`Content-Type: application/octet-stream`)
 
@@ -270,35 +349,21 @@ Initiate chunked upload.
 
 ---
 
-### `POST /notes/{noteId}/uploads/{uploadId}/complete`
+### `POST /notes/{noteId}/attachments/{attachmentId}/uploads/{uploadId}/complete`
 
-Assemble chunks, validate SSNT, persist note.
+Assemble chunks into `note_attachments` and recompute composite etag.
 
-**Request (optional conflict check):**
+**Request (optional):**
 ```json
 {
-  "ifMatch": "a1b2c3..."
+  "ifMatch": "d4e5f6...",
+  "contentType": "image/jpeg"
 }
 ```
 
-**Response `200 OK`:**
-```json
-{
-  "syncState": "synced",
-  "updatedAt": 1700000000,
-  "etag": "a1b2c3..."
-}
-```
+**Response `200 OK`:** same shape as attachment PUT (`AttachmentUploadResponse`).
 
 **Errors:** `400 validation_error`, `409 conflict`, `400` incomplete chunks
-
----
-
-### Chunked download (optional v1)
-
-For symmetry, `GET /notes/{noteId}` with `Range: bytes=0-5242879` returns `206 Partial Content`.
-
-If not implemented in v1, clients download full blob via single GET (acceptable for read path until mobile needs it).
 
 ---
 
@@ -373,20 +438,42 @@ Notes shared with the current user.
 
 ### `GET /notes/shared/{noteId}`
 
-Download shared note blob + recipient's wrapped FEK.
+Download shared note body + recipient's wrapped FEK (JSON). Attachments are fetched lazily via shared attachment routes.
 
 **Response `200 OK`:**
 ```json
 {
   "noteId": "550e8400-e29b-41d4-a716-446655440001",
   "wrappedFek": "<base64>",
-  "blob": "<base64>"
+  "body": "<base64 body SSNT>"
 }
 ```
 
-Alternative: `multipart/mixed` or separate `GET .../blob` — implementer may choose; document final choice in implementation.
+**Errors:** `401 unauthorized`, `404 share_not_found`
+
+---
+
+### `GET /notes/shared/{noteId}/body`
+
+Raw shared body SSNT bytes with body `ETag` header.
 
 **Errors:** `401 unauthorized`, `404 share_not_found`
+
+---
+
+### `GET /notes/shared/{noteId}/attachments`
+
+Shared attachment manifest (same shape as owner list).
+
+**Errors:** `401 unauthorized`, `404 share_not_found`
+
+---
+
+### `GET /notes/shared/{noteId}/attachments/{attachmentId}`
+
+Opaque shared attachment bytes with attachment `ETag`.
+
+**Errors:** `401 unauthorized`, `404 share_not_found`, `404 attachment_not_found`
 
 ---
 
@@ -411,6 +498,7 @@ Recipient removes themselves from the share (deletes `note_shares` row).
 | `header_not_found` | 404 | vault |
 | `public_key_not_found` | 404 | vault |
 | `note_not_found` | 404 | notes |
+| `attachment_not_found` | 404 | attachments |
 | `user_not_found` | 404 | share, vault |
 | `share_not_found` | 404 | share |
 | `already_shared` | 409 | share |

@@ -9,10 +9,10 @@ from tests.fixtures import make_note_blob
 from tests.support import (
     WRAPPED_FEK_B64,
     create_note,
-    large_note_blob,
+    large_attachment_bytes,
     login_user,
     register_user,
-    upload_note_chunks,
+    upload_attachment_chunks,
     vault_header_bytes,
 )
 
@@ -31,7 +31,7 @@ async def test_acceptance_1_register_vault_note_roundtrip(client):
 
     note_id, blob = await create_note(client, user["headers"], note_id=note_id)
 
-    got = await client.get(f"/v1/notes/{note_id}", headers=user["headers"])
+    got = await client.get(f"/v1/notes/{note_id}/body", headers=user["headers"])
     assert got.status_code == 200
     assert got.content == blob
 
@@ -49,7 +49,7 @@ async def test_acceptance_2_second_device_lists_and_downloads_note(client):
     assert listed.status_code == 200
     assert any(item["noteId"] == str(note_id) for item in listed.json())
 
-    got = await client.get(f"/v1/notes/{note_id}", headers=device_b["headers"])
+    got = await client.get(f"/v1/notes/{note_id}/body", headers=device_b["headers"])
     assert got.status_code == 200
     assert got.content == blob
 
@@ -60,7 +60,7 @@ async def test_acceptance_3_if_match_conflict(client):
     note_id, blob = await create_note(client, user["headers"])
 
     conflict = await client.put(
-        f"/v1/notes/{note_id}",
+        f"/v1/notes/{note_id}/body",
         headers={
             **user["headers"],
             "Content-Type": "application/octet-stream",
@@ -73,16 +73,20 @@ async def test_acceptance_3_if_match_conflict(client):
 
 
 @pytest.mark.asyncio
-async def test_acceptance_4_chunked_upload_matches_simple_put(client):
+async def test_acceptance_4_chunked_attachment_upload(client):
     user = await register_user(client, "acceptance-4@example.com")
-    note_id = uuid.UUID("550e8400-e29b-41d4-a716-446655440011")
-    blob = large_note_blob(note_id=note_id)
+    note_id, _ = await create_note(client, user["headers"])
+    attachment_id = uuid.UUID("550e8400-e29b-41d4-a716-446655440011")
+    data = large_attachment_bytes()
 
-    await upload_note_chunks(client, user["headers"], note_id, blob)
+    await upload_attachment_chunks(client, user["headers"], note_id, attachment_id, data)
 
-    got = await client.get(f"/v1/notes/{note_id}", headers=user["headers"])
+    got = await client.get(
+        f"/v1/notes/{note_id}/attachments/{attachment_id}",
+        headers=user["headers"],
+    )
     assert got.status_code == 200
-    assert got.content == blob
+    assert got.content == data
     assert len(got.content) > 10_485_760
 
 
@@ -103,7 +107,7 @@ async def test_acceptance_5_alice_shares_bob_downloads(client):
     assert download.status_code == 200
     body = download.json()
     assert body["wrappedFek"] == WRAPPED_FEK_B64
-    assert base64.b64decode(body["blob"]) == blob
+    assert base64.b64decode(body["body"]) == blob
 
 
 @pytest.mark.asyncio
@@ -120,7 +124,7 @@ async def test_acceptance_6_shared_list_reflects_owner_update(client):
 
     updated_blob = make_note_blob(note_id=note_id, title="Updated", updated_at=1_800_000_000)
     await client.put(
-        f"/v1/notes/{note_id}",
+        f"/v1/notes/{note_id}/body",
         headers={**alice["headers"], "Content-Type": "application/octet-stream"},
         content=updated_blob,
     )
@@ -147,7 +151,7 @@ async def test_acceptance_7_bob_removes_share_alice_keeps_note(client):
     listed = await client.get("/v1/notes/shared", headers=bob["headers"])
     assert listed.json() == []
 
-    alice_note = await client.get(f"/v1/notes/{note_id}", headers=alice["headers"])
+    alice_note = await client.get(f"/v1/notes/{note_id}/body", headers=alice["headers"])
     assert alice_note.status_code == 200
 
 

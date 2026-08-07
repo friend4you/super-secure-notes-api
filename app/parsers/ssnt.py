@@ -12,6 +12,8 @@ class NoteMetadata:
     note_id: uuid.UUID
     title: str
     updated_at: int
+    attachment_count: int
+    attachments_total_size: int
 
 
 def _read_note_id(reader: ByteReader) -> uuid.UUID:
@@ -20,6 +22,7 @@ def _read_note_id(reader: ByteReader) -> uuid.UUID:
 
 
 def parse_note_blob(data: bytes) -> NoteMetadata:
+    """Parse body-only SSNT v1. Rejects trailing bytes after encrypted_payload."""
     if not data:
         raise ParseError("Empty note blob.")
 
@@ -34,12 +37,18 @@ def parse_note_blob(data: bytes) -> NoteMetadata:
     title = reader.read_length_prefixed_string()
     reader.read_u64_be()  # created_at
     updated_at = reader.read_u64_be()
-    reader.read_u32_be()  # attachment_count
-    reader.read_u64_be()  # attachments_total_size
+    attachment_count = reader.read_u32_be()
+    attachments_total_size = reader.read_u64_be()
     reader.read_length_prefixed_bytes()  # wrapped_fek
     reader.read_length_prefixed_bytes()  # encrypted_payload
 
     if not reader.at_end:
         raise ParseError("Note blob contains trailing bytes.")
 
-    return NoteMetadata(note_id=note_id, title=title, updated_at=updated_at)
+    return NoteMetadata(
+        note_id=note_id,
+        title=title,
+        updated_at=updated_at,
+        attachment_count=attachment_count,
+        attachments_total_size=attachments_total_size,
+    )

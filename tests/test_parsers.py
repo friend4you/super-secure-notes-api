@@ -28,3 +28,12 @@ def test_parse_note_blob():
     assert metadata.note_id == note_id
     assert metadata.title == "My note"
     assert metadata.updated_at == 1_700_000_100
+    assert metadata.attachment_count == 0
+    assert metadata.attachments_total_size == 0
+
+
+def test_parse_note_blob_rejects_trailing_bytes():
+    note_id = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+    blob = make_note_blob(note_id=note_id) + b"\x00"
+    with pytest.raises(ParseError, match="trailing"):
+        parse_note_blob(blob)

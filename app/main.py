@@ -26,11 +26,11 @@ OPENAPI_TAGS = [
     },
     {
         "name": "notes",
-        "description": "Note index and blob CRUD for the authenticated owner.",
+        "description": "Note index, body, and attachment CRUD for the authenticated owner.",
     },
     {
         "name": "uploads",
-        "description": "Chunked upload sessions for note blobs larger than 10 MB.",
+        "description": "Chunked upload sessions for attachments larger than 10 MB.",
     },
     {
         "name": "sharing",
@@ -49,7 +49,8 @@ def create_app() -> FastAPI:
         version="1.0.0",
         description=(
             "REST backend for the superSecureNotes encrypted notes app. "
-            "Stores opaque vault headers and note blobs only — no decryption on the server."
+            "Stores opaque vault headers, note bodies, and attachments only — "
+            "no decryption on the server."
         ),
         openapi_tags=OPENAPI_TAGS,
     )

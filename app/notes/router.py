@@ -8,10 +8,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.errors import APIError
-from app.models import NoteBlob, User
+from app.models import Note, NoteBlob, User
 from app.notes.constants import MAX_SIMPLE_UPLOAD_BYTES
-from app.notes.schemas import NoteSummaryResponse, NoteUploadResponse
-from app.notes.service import get_active_note, persist_note_blob
+from app.notes.schemas import (
+    AttachmentSummaryResponse,
+    AttachmentUploadResponse,
+    NoteSummaryResponse,
+    NoteUploadResponse,
+)
+from app.notes.service import (
+    attachment_stats_for_notes,
+    attachment_to_summary,
+    compute_etag,
+    delete_attachment,
+    get_active_note,
+    get_note_attachment,
+    list_note_attachments,
+    persist_attachment,
+    persist_note_body,
+    soft_delete_note,
+)
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -22,13 +38,16 @@ async def list_notes(
     db: Annotated[AsyncSession, Depends(get_db)],
     include_deleted: bool = Query(False, alias="includeDeleted"),
 ) -> list[NoteSummaryResponse]:
-    from app.models import Note
-
     query = select(Note).where(Note.user_id == user.id)
     if not include_deleted:
         query = query.where(Note.deleted_at.is_(None))
 
     result = await db.execute(query.order_by(Note.updated_at.desc()))
+    notes = list(result.scalars().all())
+    stats = await attachment_stats_for_notes(
+        db, user.id, [note.note_id for note in notes]
+    )
+
     return [
         NoteSummaryResponse(
             noteId=note.note_id,
@@ -36,13 +55,15 @@ async def list_notes(
             updatedAt=note.updated_at,
             syncState=note.sync_state,
             etag=note.etag,
+            attachmentCount=stats.get(note.note_id, (0, 0))[0],
+            attachmentsTotalSize=stats.get(note.note_id, (0, 0))[1],
         )
-        for note in result.scalars()
+        for note in notes
     ]
 
 
-@router.get("/{note_id}", summary="Download note blob")
-async def get_note(
+@router.get("/{note_id}/body", summary="Download note body")
+async def get_note_body(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -59,17 +80,22 @@ async def get_note(
     )
     blob = blob_result.scalar_one_or_none()
     if blob is None:
-        raise APIError(404, "note_not_found", "Note blob not found.")
+        raise APIError(404, "note_not_found", "Note body not found.")
 
+    body_etag = compute_etag(blob.data)
     return Response(
         content=blob.data,
         media_type="application/octet-stream",
-        headers={"ETag": f'"{note.etag}"'},
+        headers={"ETag": f'"{body_etag}"'},
     )
 
 
-@router.put("/{note_id}", response_model=NoteUploadResponse, summary="Upload or replace note (≤ 10 MB)")
-async def put_note(
+@router.put(
+    "/{note_id}/body",
+    response_model=NoteUploadResponse,
+    summary="Upload or replace note body (≤ 10 MB)",
+)
+async def put_note_body(
     note_id: UUID,
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -81,35 +107,112 @@ async def put_note(
         raise APIError(
             400,
             "validation_error",
-            "Note exceeds 10 MB; use chunked upload.",
+            "Note body exceeds 10 MB; keep body small and use attachment routes.",
         )
 
-    return await persist_note_blob(db, user.id, note_id, body, if_match)
+    return await persist_note_body(db, user.id, note_id, body, if_match)
 
 
-@router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Soft-delete a note")
+@router.get(
+    "/{note_id}/attachments",
+    response_model=list[AttachmentSummaryResponse],
+    summary="List attachment manifest",
+)
+async def list_attachments(
+    note_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[AttachmentSummaryResponse]:
+    note = await get_active_note(db, user.id, note_id)
+    if note is None:
+        raise APIError(404, "note_not_found", "Note not found.")
+
+    attachments = await list_note_attachments(db, user.id, note_id)
+    return [attachment_to_summary(attachment) for attachment in attachments]
+
+
+@router.get(
+    "/{note_id}/attachments/{attachment_id}",
+    summary="Download attachment",
+)
+async def get_attachment(
+    note_id: UUID,
+    attachment_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    note = await get_active_note(db, user.id, note_id)
+    if note is None:
+        raise APIError(404, "note_not_found", "Note not found.")
+
+    attachment = await get_note_attachment(db, user.id, note_id, attachment_id)
+    if attachment is None:
+        raise APIError(404, "attachment_not_found", "Attachment not found.")
+
+    return Response(
+        content=attachment.data,
+        media_type="application/octet-stream",
+        headers={"ETag": f'"{attachment.etag}"'},
+    )
+
+
+@router.put(
+    "/{note_id}/attachments/{attachment_id}",
+    response_model=AttachmentUploadResponse,
+    summary="Upload or replace attachment (≤ 10 MB)",
+)
+async def put_attachment(
+    note_id: UUID,
+    attachment_id: UUID,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    content_type: Annotated[str | None, Query(alias="contentType")] = None,
+) -> AttachmentUploadResponse:
+    data = await request.body()
+    if len(data) > MAX_SIMPLE_UPLOAD_BYTES:
+        raise APIError(
+            400,
+            "validation_error",
+            "Attachment exceeds 10 MB; use chunked upload.",
+        )
+
+    return await persist_attachment(
+        db,
+        user.id,
+        note_id,
+        attachment_id,
+        data,
+        content_type=content_type,
+        if_match=if_match,
+    )
+
+
+@router.delete(
+    "/{note_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete attachment",
+)
+async def remove_attachment(
+    note_id: UUID,
+    attachment_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    await delete_attachment(db, user.id, note_id, attachment_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/{note_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soft-delete a note",
+)
 async def delete_note(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    from datetime import UTC, datetime
-
-    note = await get_active_note(db, user.id, note_id)
-    if note is None:
-        raise APIError(404, "note_not_found", "Note not found.")
-
-    note.deleted_at = datetime.now(UTC)
-
-    blob_result = await db.execute(
-        select(NoteBlob).where(
-            NoteBlob.user_id == user.id,
-            NoteBlob.note_id == note_id,
-        )
-    )
-    blob = blob_result.scalar_one_or_none()
-    if blob is not None:
-        await db.delete(blob)
-
-    await db.commit()
+    await soft_delete_note(db, user.id, note_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

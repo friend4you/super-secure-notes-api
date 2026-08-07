@@ -7,17 +7,18 @@
 │  superSecureNotes │  Bearer JWT               │  super-secure-notes-api │
 │  (Swift client)   │ ────────────────────────▶ │  FastAPI + PostgreSQL   │
 │                   │                           │                         │
-│  SecureCrypto     │  opaque blobs only        │  SSNT/SSNV header parse │
-│  VaultSession     │  (vault.meta, .note)      │  (metadata index only)  │
+│  SecureCrypto     │  opaque bytes only        │  SSNT/SSNV header parse │
+│  VaultSession     │  (vault, body, files)     │  (metadata index only)  │
 └──────────────────┘                           └─────────────────────────┘
 ```
 
 ## Design principles
 
-1. **Zero-knowledge notes** — Server stores encrypted note blobs and vault headers. No UDK, FEK, or identity private keys on the server.
+1. **Zero-knowledge notes** — Server stores encrypted note bodies, attachments, and vault headers. No UDK, FEK, or identity private keys on the server.
 2. **Account auth is server-side** — Email + password for JWT login. Same password string is used client-side for vault unlock (v1 UX); server only stores `password_hash`.
-3. **Metadata indexing** — Server parses plaintext fields from wire formats (`SSNV` vault header, `SSNT` note header) to power list endpoints. Titles are plaintext by design (accepted threat model).
+3. **Metadata indexing** — Server parses plaintext fields from wire formats (`SSNV` vault header, `SSNT` note body header) to power list endpoints. Titles are plaintext by design (accepted threat model).
 4. **Per-user isolation** — Every resource row is scoped by `user_id`. Sharing uses explicit grant rows, not copied blobs.
+5. **Lazy attachments** — Body and attachments are separate resources so clients can open text without downloading large files.
 
 ## Crypto boundaries (client only)
 
@@ -50,10 +51,12 @@ Server **never** unwraps UDK or identity private key.
 
 | Layer | Owner | Content |
 |-------|-------|---------|
-| `notes` table | Index | `note_id`, `title`, `updated_at`, `etag`, `sync_state`, `deleted_at` |
-| `note_blobs` table | Owner | Full `.note` wire blob (`SSNT` magic) |
+| `notes` table | Index | `note_id`, `title`, `updated_at`, composite `etag`, `sync_state`, `deleted_at` |
+| `note_blobs` table | Owner | Body-only SSNT (`SSNT` magic; no trailing attachment bytes) |
+| `note_attachments` table | Owner | Opaque encrypted attachment bytes + per-file etag/size |
 
-Local payload files on mobile (`{uuid}/payload`) are a client optimization. On the server, the **full `.note` blob** is stored (matches `NoteAPIClient` contract).
+Composite etag = SHA-256 of `body_etag + "|" +` sorted `attachmentId:attachment_etag` pairs.  
+`notes.updated_at` = max(body SSNT `updated_at`, max attachment `updated_at`).
 
 ## Sharing model (pointer)
 
@@ -61,33 +64,34 @@ Local payload files on mobile (`{uuid}/payload`) are a client optimization. On t
 Alice (owner)                         Bob (recipient)
 ─────────────                         ───────────────
 notes.note_id = X                     note_shares:
-note_blobs.data = encrypted blob        recipient_id = Bob
-                                        note_id = X  (pointer)
+note_blobs.data = body SSNT             recipient_id = Bob
+note_attachments.* = files              note_id = X  (pointer)
                                         wrapped_fek  (for Bob's pubkey)
 ```
 
-- Bob reads the **same blob** as Alice via share grant.
+- Bob reads the **same body and attachments** as Alice via share grant.
 - Bob unwraps FEK with his **identity private key**, not UDK.
-- **Read-only** — only Alice can `PUT` the note blob.
+- **Read-only** — only Alice can PUT body/attachments.
 - Bob hides share: `DELETE /notes/shared/{noteId}` removes his `note_shares` row only.
+- Lazy download: JSON shared download returns `body`; attachments via `/notes/shared/{noteId}/attachments/...`.
 
 ## Upload strategy
 
-| Blob size | Method |
-|-----------|--------|
-| ≤ 10 MB | Single `PUT /notes/{noteId}` |
-| > 10 MB | Chunked: `POST` init → `PUT` chunks (5 MB each) → `POST` complete |
-
-Both paths return the same sync response body.
+| Resource | Size | Method |
+|----------|------|--------|
+| Note body | ≤ 10 MB | `PUT /notes/{noteId}/body` |
+| Attachment | ≤ 10 MB | `PUT /notes/{noteId}/attachments/{attachmentId}` |
+| Attachment | > 10 MB | Chunked under `.../attachments/{attachmentId}/uploads` (5 MB chunks) |
 
 ## Multi-device sync
 
-- Each note has `updated_at` (Unix seconds) and `etag` (content hash or revision token).
-- Upload may send `If-Match: <etag>`; mismatch → `409 conflict`.
+- Each note has composite `updated_at` and `etag`.
+- Body PUT may send `If-Match: <composite_etag>`; mismatch → `409 conflict`.
+- Attachment PUT may send `If-Match: <attachment_etag>`.
 - Soft delete via `deleted_at` for tombstone sync across devices.
-- `GET /notes` includes `syncState`, `updatedAt`, `etag` (extensions beyond current mobile client).
+- `GET /notes` includes `syncState`, `etag`, `attachmentCount`, `attachmentsTotalSize`.
 
-## Technology (planned)
+## Technology
 
 | Component | Choice |
 |-----------|--------|
@@ -100,14 +104,13 @@ Both paths return the same sync response body.
 | Password hashing | bcrypt |
 | Local dev | Docker Compose |
 
-## Planned project layout
+## Project layout
 
 ```
 super-secure-notes-api/
 ├── app/
 │   ├── main.py
 │   ├── config.py
-│   ├── db/
 │   ├── auth/
 │   ├── vault/
 │   ├── notes/

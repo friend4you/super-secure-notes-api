@@ -11,15 +11,22 @@ from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.errors import APIError
 from app.models import Note, NoteBlob, NoteShare, User
-from app.users.service import find_user_by_email
-from app.notes.service import get_active_note
+from app.notes.service import (
+    attachment_to_summary,
+    compute_etag,
+    get_active_note,
+    get_note_attachment,
+    list_note_attachments,
+)
 from app.shares.schemas import (
+    AttachmentSummaryResponse,
     ShareNoteRequest,
     ShareNoteResponse,
     SharedNoteDownloadResponse,
     SharedNoteSummaryResponse,
     decode_wrapped_fek,
 )
+from app.users.service import find_user_by_email
 
 router = APIRouter(prefix="/notes", tags=["sharing"])
 
@@ -69,7 +76,87 @@ async def list_shared_notes(
     ]
 
 
-@router.get("/shared/{note_id}", response_model=SharedNoteDownloadResponse, summary="Download shared note")
+@router.get(
+    "/shared/{note_id}/body",
+    summary="Download shared note body",
+)
+async def get_shared_note_body(
+    note_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    share = await _get_recipient_share(db, user.id, note_id)
+    if share is None:
+        raise APIError(404, "share_not_found", "Shared note not found.")
+
+    blob_result = await db.execute(
+        select(NoteBlob).where(
+            NoteBlob.user_id == share.owner_id,
+            NoteBlob.note_id == note_id,
+        )
+    )
+    blob = blob_result.scalar_one_or_none()
+    if blob is None:
+        raise APIError(404, "share_not_found", "Shared note body not found.")
+
+    body_etag = compute_etag(blob.data)
+    return Response(
+        content=blob.data,
+        media_type="application/octet-stream",
+        headers={"ETag": f'"{body_etag}"'},
+    )
+
+
+@router.get(
+    "/shared/{note_id}/attachments",
+    response_model=list[AttachmentSummaryResponse],
+    summary="List shared attachment manifest",
+)
+async def list_shared_attachments(
+    note_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[AttachmentSummaryResponse]:
+    share = await _get_recipient_share(db, user.id, note_id)
+    if share is None:
+        raise APIError(404, "share_not_found", "Shared note not found.")
+
+    attachments = await list_note_attachments(db, share.owner_id, note_id)
+    return [attachment_to_summary(attachment) for attachment in attachments]
+
+
+@router.get(
+    "/shared/{note_id}/attachments/{attachment_id}",
+    summary="Download shared attachment",
+)
+async def get_shared_attachment(
+    note_id: UUID,
+    attachment_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    share = await _get_recipient_share(db, user.id, note_id)
+    if share is None:
+        raise APIError(404, "share_not_found", "Shared note not found.")
+
+    attachment = await get_note_attachment(
+        db, share.owner_id, note_id, attachment_id
+    )
+    if attachment is None:
+        raise APIError(404, "attachment_not_found", "Attachment not found.")
+
+    return Response(
+        content=attachment.data,
+        media_type="application/octet-stream",
+        headers={"ETag": f'"{attachment.etag}"'},
+    )
+
+
+@router.get(
+    "/shared/{note_id}",
+    response_model=SharedNoteDownloadResponse,
+    summary="Download shared note body (JSON)",
+)
 async def get_shared_note(
     note_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
@@ -87,12 +174,12 @@ async def get_shared_note(
     )
     blob = blob_result.scalar_one_or_none()
     if blob is None:
-        raise APIError(404, "share_not_found", "Shared note blob not found.")
+        raise APIError(404, "share_not_found", "Shared note body not found.")
 
     return SharedNoteDownloadResponse(
         noteId=note_id,
         wrappedFek=base64.b64encode(share.wrapped_fek).decode("ascii"),
-        blob=base64.b64encode(blob.data).decode("ascii"),
+        body=base64.b64encode(blob.data).decode("ascii"),
     )
 
 

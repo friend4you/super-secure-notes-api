@@ -1,7 +1,7 @@
-# super-secure-notes-api — Specification v1
+# super-secure-notes-api — Specification v1.1
 
-**Status:** Approved for implementation  
-**Mobile client:** `superSecureNotes` (Swift) — will catch up to extended API  
+**Status:** Implemented  
+**Mobile client:** `superSecureNotes` (Swift) — coordinated release for body/attachment split  
 **Stack:** Python 3.12+, FastAPI, PostgreSQL 16, Docker Compose (local)
 
 ---
@@ -12,10 +12,10 @@ Provide a REST backend that:
 
 1. Authenticates users (JWT + refresh token rotation)
 2. Stores opaque vault headers (`vault.meta` / `SSNV`)
-3. Stores encrypted note blobs (`.note` / `SSNT`) with metadata indexing
-4. Supports multi-device sync (`etag`, `syncState`, soft delete, conflict detection)
-5. Supports chunked upload for blobs > 10 MB (5 MB chunks)
-6. Supports read-only note sharing by recipient email (pointer model + per-recipient `wrappedFek`)
+3. Stores encrypted note **bodies** (SSNT) and **attachments** separately with metadata indexing
+4. Supports multi-device sync (composite `etag`, `syncState`, soft delete, conflict detection)
+5. Supports chunked upload for **attachments** > 10 MB (5 MB chunks)
+6. Supports read-only note sharing by recipient email (pointer model + per-recipient `wrappedFek` + lazy parts)
 
 The server **must not** decrypt vault keys, note payloads, or FEKs.
 
@@ -31,27 +31,25 @@ The server **must not** decrypt vault keys, note payloads, or FEKs.
 
 ## 3. Mobile alignment
 
-### 3.1 Already implemented in Swift (match exactly)
+### 3.1 Breaking change (body / attachments split)
 
-| Client | Endpoints |
-|--------|-----------|
-| `AuthAPIClient` | `POST /auth/register`, `/login`, `/logout`, `/refresh` |
-| `VaultAPIClient` | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
-| `NoteAPIClient` | `GET /notes`, `GET/PUT/DELETE /notes/{noteId}` |
+| Removed | Replacement |
+|---------|-------------|
+| `GET/PUT /notes/{noteId}` monolithic blob | `GET/PUT /notes/{noteId}/body` + attachment routes |
+| `POST /notes/{noteId}/uploads...` | `POST /notes/{noteId}/attachments/{attachmentId}/uploads...` |
+| Shared download field `blob` | Field `body` + lazy shared attachment GETs |
 
-Base path: `/v1` (e.g. `https://api.example.com/v1`).
+### 3.2 Current contract
 
-### 3.2 Extensions (mobile catch-up later)
+| Client area | Endpoints |
+|-------------|-----------|
+| Auth | `POST /auth/register`, `/login`, `/logout`, `/refresh` |
+| Vault | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
+| Notes | `GET /notes`, `GET/PUT /notes/{noteId}/body`, `DELETE /notes/{noteId}` |
+| Attachments | `GET/PUT/DELETE /notes/{noteId}/attachments...`, chunked uploads |
+| Sharing | `/notes/shared...`, share grant management |
 
-| Feature | Change |
-|---------|--------|
-| Sync metadata | `GET /notes` adds `syncState`, `etag` |
-| Upload response | `PUT /notes/{id}` returns `200` + JSON (was `204`) |
-| Conflict | `If-Match` header on PUT |
-| Chunked upload | New upload session endpoints |
-| Sharing | New `/notes/shared` and share management endpoints |
-
-Older clients ignore unknown JSON fields; new behavior requires mobile updates.
+Base path: `/v1`.
 
 ---
 
@@ -70,22 +68,20 @@ Parse on `PUT /vault/header`:
 
 Do **not** unwrap UDK or identity private key.
 
-Reference: `Packages/SecureCrypto/.../Vault/VaultHeader.swift`
+### 4.2 Note body (`SSNT`)
 
-### 4.2 Note blob (`SSNT`)
-
-Parse on upload (simple PUT or chunked complete):
+Parse on body PUT:
 
 | Field | Use |
 |-------|-----|
 | Magic `SSNT` | Validation |
 | `note_id` (16 bytes UUID) | Must match URL `{noteId}` |
 | `title` | Index in `notes.title` |
-| `updated_at` (UInt64 BE) | Index in `notes.updated_at` |
+| `updated_at` (UInt64 BE) | Input to composite `notes.updated_at` |
+| `attachment_count` / `attachments_total_size` | Must match `note_attachments` index |
+| Trailing bytes after `encrypted_payload` | Rejected |
 
-Do **not** decrypt `encrypted_payload` or unwrap `wrapped_fek`.
-
-Reference: `Packages/SecureCrypto/.../Note/NoteFile.swift`
+Do **not** decrypt `encrypted_payload` or unwrap `wrapped_fek`. Attachments are opaque bytes on separate routes.
 
 ---
 
@@ -93,62 +89,57 @@ Reference: `Packages/SecureCrypto/.../Note/NoteFile.swift`
 
 ### 5.1 Authentication
 
-- [ ] Register with email + password; reject duplicate email (`email_already_exists`)
-- [ ] Login with bcrypt verification (`invalid_credentials` on failure)
-- [ ] Issue JWT access token (15 min) + opaque refresh token (30 days)
-- [ ] Refresh rotates refresh token; revoke old hash
-- [ ] Logout invalidates refresh token(s)
-- [ ] All note/vault routes require valid access token
+- [x] Register with email + password; reject duplicate email (`email_already_exists`)
+- [x] Login with bcrypt verification (`invalid_credentials` on failure)
+- [x] Issue JWT access token (15 min) + opaque refresh token (30 days)
+- [x] Refresh rotates refresh token; revoke old hash
+- [x] Logout invalidates refresh token(s)
+- [x] All note/vault routes require valid access token
 
 ### 5.2 Vault
 
-- [ ] One vault header per user; `404 header_not_found` if missing on GET
-- [ ] PUT replaces header; extract public key for index
-- [ ] Public key endpoint returns base64 + `algorithmId: 1`
+- [x] One vault header per user; `404 header_not_found` if missing on GET
+- [x] PUT replaces header; extract public key for index
+- [x] Public key endpoint returns base64 + `algorithmId: 1`
 
 ### 5.3 Notes (owner)
 
-- [ ] List active notes for authenticated user
-- [ ] GET returns full `.note` blob with `ETag` header
-- [ ] PUT ≤ 10 MB: validate, store, index, return sync JSON
-- [ ] PUT with `If-Match`: return `409 conflict` on etag mismatch
-- [ ] DELETE soft-deletes (`deleted_at`); exclude from default list
-- [ ] Compute `etag` as SHA-256 hex of stored blob
+- [x] List active notes with `attachmentCount`, `attachmentsTotalSize`, composite `etag`
+- [x] `GET /notes/{noteId}/body` returns body SSNT with body `ETag`
+- [x] `PUT /notes/{noteId}/body` ≤ 10 MB: validate, store, index, return sync JSON
+- [x] PUT with `If-Match` against composite etag → `409 conflict` on mismatch
+- [x] DELETE soft-deletes (`deleted_at`); removes body + attachments
+- [x] Composite etag over body + attachments
 
-### 5.4 Chunked upload
+### 5.4 Attachments
 
-- [ ] Reject chunked flow when `totalSize ≤ 10 MB`
-- [ ] Chunk size: 5 MB (5_242_880 bytes); last chunk may be smaller
-- [ ] Session expires after 24 hours
-- [ ] Complete: assemble, validate SSNT, same outcome as simple PUT
-- [ ] Abort incomplete sessions on new upload for same note (or return 409)
+- [x] Manifest list, per-attachment GET/PUT/DELETE
+- [x] Optional plaintext `contentType` on PUT
+- [x] Chunked upload when attachment `totalSize` > 10 MB
+- [x] Reject chunked flow when `totalSize ≤ 10 MB`
 
 ### 5.5 Sharing (read-only)
 
-- [ ] Owner shares by `recipientEmail` + opaque `wrappedFek` (base64)
-- [ ] Resolve email case-insensitively; `404 user_not_found` if absent
-- [ ] Reject share with self; `409 already_shared` on duplicate
-- [ ] Recipient lists shared notes with owner's `updatedAt` / `etag`
-- [ ] Recipient downloads blob via pointer to owner's `note_blobs`
-- [ ] Recipient `DELETE /notes/shared/{noteId}` removes grant only
-- [ ] Owner `DELETE /notes/{noteId}/share/{email}` revokes grant
-- [ ] Only owner may PUT note blob; recipients read-only
+- [x] Owner shares by `recipientEmail` + opaque `wrappedFek` (base64)
+- [x] Shared JSON download returns `body` (not monolithic `blob`)
+- [x] Shared body / manifest / attachment GET routes
+- [x] Recipients read-only (no PUT/DELETE on shared attachment paths)
 
 ### 5.6 Multi-device sync
 
-- [ ] `updatedAt` + `etag` on list and upload responses
-- [ ] Soft delete tombstones (`deleted_at`) for sync reconciliation
-- [ ] Optional `?includeDeleted=true` on `GET /notes` for delta sync
+- [x] Composite `updatedAt` + `etag` on list and body upload responses
+- [x] Soft delete tombstones (`deleted_at`) for sync reconciliation
+- [x] Optional `?includeDeleted=true` on `GET /notes` for delta sync
 
 ---
 
 ## 6. Non-functional requirements
 
-- [ ] Local development via `docker compose up` (Postgres + API)
-- [ ] Health check: `GET /health` → `200 OK`
-- [ ] OpenAPI docs at `/docs` (FastAPI default)
-- [ ] Structured logging (request id, user id)
-- [ ] Input validation on all JSON bodies
+- [x] Local development via `docker compose up` (Postgres + API)
+- [x] Health check: `GET /health` → `200 OK`
+- [x] OpenAPI docs at `/docs` (FastAPI default)
+- [x] Structured logging (request id, user id)
+- [x] Input validation on all JSON bodies
 - [ ] Rate limiting deferred (document as future)
 
 ---
@@ -160,7 +151,8 @@ Reference: `Packages/SecureCrypto/.../Note/NoteFile.swift`
 | Account password | bcrypt hash only |
 | Refresh token | SHA-256 hash only |
 | Vault header | Opaque BYTEA |
-| Note blob | Opaque BYTEA |
+| Note body | Opaque BYTEA |
+| Attachments | Opaque BYTEA |
 | wrappedFek (share) | Opaque BYTEA |
 
 - HTTPS required in production (HTTP OK for local Docker)
@@ -169,62 +161,32 @@ Reference: `Packages/SecureCrypto/.../Note/NoteFile.swift`
 
 ---
 
-## 8. Implementation phases
+## 8. Acceptance criteria (E2E)
 
-### Phase 1 — Foundation
-- Project scaffold (FastAPI, SQLAlchemy, Alembic)
-- Docker Compose (Postgres)
-- User model + auth endpoints
-- JWT + refresh rotation
-
-### Phase 2 — Vault + Notes
-- SSNV / SSNT parsers (metadata only)
-- Vault GET/PUT + public key endpoint
-- Notes CRUD + list with sync fields
-- etag + conflict detection
-
-### Phase 3 — Chunked upload
-- Upload sessions + chunks
-- Complete flow + cleanup job
-
-### Phase 4 — Sharing
-- `note_shares` CRUD
-- Shared list + download
-- Recipient self-remove
-
-### Phase 5 — Tests + polish
-- Integration tests per endpoint
-- OpenAPI validation against mobile contract
-- README run instructions
-
----
-
-## 9. Acceptance criteria (E2E)
-
-1. Register → PUT vault header → PUT note → GET note returns same bytes
-2. Login on second "device" (token) → GET notes lists note → GET blob matches
-3. PUT with wrong `If-Match` → 409
-4. Upload 12 MB note via chunks → same as simple PUT outcome
-5. Alice shares with Bob → Bob GET shared → receives blob + wrappedFek
-6. Alice updates note → Bob GET shared list shows new `updatedAt`
+1. Register → PUT vault header → PUT body → GET body returns same bytes
+2. Login on second device → GET notes lists note → GET body matches
+3. PUT body with wrong `If-Match` → 409
+4. Upload large attachment via chunks → GET attachment matches
+5. Alice shares with Bob → Bob GET shared → receives `body` + wrappedFek
+6. Alice updates body → Bob GET shared list shows new `updatedAt`
 7. Bob DELETE shared → Bob no longer sees note; Alice still has it
 8. Refresh token rotation works; old refresh rejected
 
 ---
 
-## 10. Open items (non-blocking)
+## 9. Open items (non-blocking)
 
 | Item | Decision |
 |------|----------|
-| Shared note download shape | JSON with base64 fields in v1 (see api.md); may add raw blob route later |
-| Chunked download (Range) | Optional v1; single GET acceptable initially |
-| Blob retention after soft delete | Tombstone in `notes`; delete `note_blobs` row |
+| Chunked download (Range) | Not in v1; full GET per resource |
+| Blob retention after soft delete | Tombstone in `notes`; delete body + attachments |
 | Production hosting | Out of scope; local Docker only for now |
 
 ---
 
-## 11. Revision history
+## 10. Revision history
 
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-08-03 | 1.0 | Initial spec from design exploration |
+| 2026-08-08 | 1.1 | Split body/attachments; composite etag; lazy shared parts |

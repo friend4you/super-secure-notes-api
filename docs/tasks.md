@@ -20,19 +20,20 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 - [x] Models: `VaultHeader`, `Note`, `NoteBlob`
 - [x] `GET/PUT /vault/header`
 - [x] `GET /users/public-key?email=`
-- [x] `GET /notes`, `GET/PUT/DELETE /notes/{noteId}`
-- [x] etag computation (SHA-256 hex)
+- [x] `GET /notes`, `GET/PUT /notes/{noteId}/body`, `DELETE /notes/{noteId}`
+- [x] Attachment manifest + `GET/PUT/DELETE .../attachments/{attachmentId}`
+- [x] Composite etag (body + attachments)
 - [x] `If-Match` conflict → 409
 - [x] Integration tests
 
 ## Phase 3 — Chunked upload
 
-- [x] Models: `UploadSession`, `UploadChunk`
-- [x] `POST /notes/{noteId}/uploads`
+- [x] Models: `UploadSession`, `UploadChunk` (+ `attachment_id`)
+- [x] `POST /notes/{noteId}/attachments/{attachmentId}/uploads`
 - [x] `PUT .../chunks/{chunkIndex}`
 - [x] `POST .../complete`
 - [x] Session expiry cleanup
-- [x] Integration tests (>10 MB flow)
+- [x] Integration tests (>10 MB attachment flow)
 
 ## Phase 4 — Sharing
 
@@ -40,7 +41,8 @@ Checklist derived from [SPEC.md](SPEC.md). Use during implementation.
 - [x] `POST /notes/{noteId}/share`
 - [x] `DELETE /notes/{noteId}/share/{email}`
 - [x] `GET /notes/shared`
-- [x] `GET /notes/shared/{noteId}`
+- [x] `GET /notes/shared/{noteId}` (returns `body`)
+- [x] Shared body / attachments lazy GET routes
 - [x] `DELETE /notes/shared/{noteId}`
 - [x] Integration tests
 

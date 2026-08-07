@@ -5,6 +5,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.notes.schemas import AttachmentSummaryResponse
+
+__all__ = [
+    "AttachmentSummaryResponse",
+    "ShareNoteRequest",
+    "ShareNoteResponse",
+    "SharedNoteDownloadResponse",
+    "SharedNoteSummaryResponse",
+    "decode_wrapped_fek",
+]
+
 
 class ShareNoteRequest(BaseModel):
     recipientEmail: EmailStr
@@ -30,7 +41,7 @@ class SharedNoteSummaryResponse(BaseModel):
 class SharedNoteDownloadResponse(BaseModel):
     noteId: UUID
     wrappedFek: str
-    blob: str
+    body: str
 
 
 def decode_wrapped_fek(value: str) -> bytes:

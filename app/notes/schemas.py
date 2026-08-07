@@ -9,12 +9,31 @@ class NoteSummaryResponse(BaseModel):
     updatedAt: int
     syncState: str
     etag: str
+    attachmentCount: int
+    attachmentsTotalSize: int
 
 
 class NoteUploadResponse(BaseModel):
     syncState: str
     updatedAt: int
     etag: str
+
+
+class AttachmentSummaryResponse(BaseModel):
+    attachmentId: UUID
+    sizeBytes: int
+    etag: str
+    updatedAt: int
+    contentType: str | None = None
+
+
+class AttachmentUploadResponse(BaseModel):
+    attachmentId: UUID
+    sizeBytes: int
+    etag: str
+    updatedAt: int
+    noteEtag: str
+    contentType: str | None = None
 
 
 class InitUploadRequest(BaseModel):
@@ -30,3 +49,4 @@ class InitUploadResponse(BaseModel):
 
 class CompleteUploadRequest(BaseModel):
     ifMatch: str | None = None
+    contentType: str | None = None

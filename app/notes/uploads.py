@@ -17,12 +17,12 @@ from app.notes.constants import (
     UPLOAD_SESSION_TTL_HOURS,
 )
 from app.notes.schemas import (
+    AttachmentUploadResponse,
     CompleteUploadRequest,
     InitUploadRequest,
     InitUploadResponse,
-    NoteUploadResponse,
 )
-from app.notes.service import persist_note_blob
+from app.notes.service import get_active_note, persist_attachment
 
 router = APIRouter(prefix="/notes", tags=["uploads"])
 
@@ -54,12 +54,16 @@ async def _cleanup_expired_sessions(db: AsyncSession, user_id: UUID) -> None:
 
 
 async def _abort_in_progress_sessions(
-    db: AsyncSession, user_id: UUID, note_id: UUID
+    db: AsyncSession,
+    user_id: UUID,
+    note_id: UUID,
+    attachment_id: UUID,
 ) -> None:
     result = await db.execute(
         select(UploadSession).where(
             UploadSession.user_id == user_id,
             UploadSession.note_id == note_id,
+            UploadSession.attachment_id == attachment_id,
             UploadSession.status == "in_progress",
         )
     )
@@ -74,6 +78,7 @@ async def _get_upload_session(
     db: AsyncSession,
     user_id: UUID,
     note_id: UUID,
+    attachment_id: UUID,
     upload_id: UUID,
 ) -> UploadSession:
     await _cleanup_expired_sessions(db, user_id)
@@ -83,6 +88,7 @@ async def _get_upload_session(
             UploadSession.id == upload_id,
             UploadSession.user_id == user_id,
             UploadSession.note_id == note_id,
+            UploadSession.attachment_id == attachment_id,
         )
     )
     session = result.scalar_one_or_none()
@@ -107,13 +113,14 @@ async def _get_upload_session(
 
 
 @router.post(
-    "/{note_id}/uploads",
+    "/{note_id}/attachments/{attachment_id}/uploads",
     response_model=InitUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Initiate chunked upload",
+    summary="Initiate chunked attachment upload",
 )
 async def init_upload(
     note_id: UUID,
+    attachment_id: UUID,
     body: InitUploadRequest,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -125,13 +132,18 @@ async def init_upload(
             "Total size must exceed 10 MB; use simple PUT instead.",
         )
 
+    note = await get_active_note(db, user.id, note_id)
+    if note is None:
+        raise APIError(404, "note_not_found", "Note not found.")
+
     await _cleanup_expired_sessions(db, user.id)
-    await _abort_in_progress_sessions(db, user.id, note_id)
+    await _abort_in_progress_sessions(db, user.id, note_id, attachment_id)
 
     total_chunks = math.ceil(body.totalSize / CHUNK_SIZE_BYTES)
     session = UploadSession(
         user_id=user.id,
         note_id=note_id,
+        attachment_id=attachment_id,
         total_size=body.totalSize,
         chunk_size=CHUNK_SIZE_BYTES,
         expected_chunks=total_chunks,
@@ -149,19 +161,22 @@ async def init_upload(
 
 
 @router.put(
-    "/{note_id}/uploads/{upload_id}/chunks/{chunk_index}",
+    "/{note_id}/attachments/{attachment_id}/uploads/{upload_id}/chunks/{chunk_index}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Upload a single chunk",
+    summary="Upload a single attachment chunk",
 )
 async def upload_chunk(
     note_id: UUID,
+    attachment_id: UUID,
     upload_id: UUID,
     chunk_index: int,
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    session = await _get_upload_session(db, user.id, note_id, upload_id)
+    session = await _get_upload_session(
+        db, user.id, note_id, attachment_id, upload_id
+    )
     expected_size = _expected_chunk_size(session, chunk_index)
 
     data = await request.body()
@@ -196,18 +211,21 @@ async def upload_chunk(
 
 
 @router.post(
-    "/{note_id}/uploads/{upload_id}/complete",
-    response_model=NoteUploadResponse,
-    summary="Complete chunked upload",
+    "/{note_id}/attachments/{attachment_id}/uploads/{upload_id}/complete",
+    response_model=AttachmentUploadResponse,
+    summary="Complete chunked attachment upload",
 )
 async def complete_upload(
     note_id: UUID,
+    attachment_id: UUID,
     upload_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     body: CompleteUploadRequest | None = None,
-) -> NoteUploadResponse:
-    session = await _get_upload_session(db, user.id, note_id, upload_id)
+) -> AttachmentUploadResponse:
+    session = await _get_upload_session(
+        db, user.id, note_id, attachment_id, upload_id
+    )
 
     if session.received_chunks != session.expected_chunks:
         raise APIError(400, "validation_error", "Upload is missing chunks.")
@@ -226,7 +244,16 @@ async def complete_upload(
         raise APIError(400, "validation_error", "Assembled blob size mismatch.")
 
     if_match = body.ifMatch if body else None
-    response = await persist_note_blob(db, user.id, note_id, assembled, if_match)
+    content_type = body.contentType if body else None
+    response = await persist_attachment(
+        db,
+        user.id,
+        note_id,
+        attachment_id,
+        assembled,
+        content_type=content_type,
+        if_match=if_match,
+    )
 
     await db.execute(delete(UploadChunk).where(UploadChunk.upload_id == upload_id))
     await db.execute(delete(UploadSession).where(UploadSession.id == upload_id))

@@ -2,6 +2,7 @@ import base64
 
 import pytest
 
+from tests.fixtures import make_note_blob
 from tests.support import WRAPPED_FEK_B64, create_note, register_user
 
 
@@ -34,11 +35,12 @@ async def test_share_flow_between_users(client):
     download_body = download.json()
     assert download_body["noteId"] == str(note_id)
     assert download_body["wrappedFek"] == WRAPPED_FEK_B64
-    assert base64.b64decode(download_body["blob"]) == blob
+    assert base64.b64decode(download_body["body"]) == blob
+    assert "blob" not in download_body
 
     updated_blob = make_note_blob(note_id=note_id, title="Updated title", updated_at=1_700_000_200)
     update = await client.put(
-        f"/v1/notes/{note_id}",
+        f"/v1/notes/{note_id}/body",
         headers={**alice["headers"], "Content-Type": "application/octet-stream"},
         content=updated_blob,
     )
@@ -53,7 +55,7 @@ async def test_share_flow_between_users(client):
     empty = await client.get("/v1/notes/shared", headers=bob["headers"])
     assert empty.json() == []
 
-    alice_note = await client.get(f"/v1/notes/{note_id}", headers=alice["headers"])
+    alice_note = await client.get(f"/v1/notes/{note_id}/body", headers=alice["headers"])
     assert alice_note.status_code == 200
 
 

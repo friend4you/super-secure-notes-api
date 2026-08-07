@@ -94,13 +94,15 @@ async def test_notes_crud_flow(client, auth_headers):
     headers, _ = auth_headers
     note_id = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
     blob = make_note_blob(note_id=note_id)
+    body_etag = hashlib.sha256(blob).hexdigest()
+    from tests.support import expected_composite_etag
 
     empty = await client.get("/v1/notes", headers=headers)
     assert empty.status_code == 200
     assert empty.json() == []
 
     put = await client.put(
-        f"/v1/notes/{note_id}",
+        f"/v1/notes/{note_id}/body",
         headers={**headers, "Content-Type": "application/octet-stream"},
         content=blob,
     )
@@ -108,20 +110,22 @@ async def test_notes_crud_flow(client, auth_headers):
     body = put.json()
     assert body["syncState"] == "synced"
     assert body["updatedAt"] == 1_700_000_100
-    assert body["etag"] == hashlib.sha256(blob).hexdigest()
+    assert body["etag"] == expected_composite_etag(blob)
 
     listed = await client.get("/v1/notes", headers=headers)
     assert listed.status_code == 200
     assert len(listed.json()) == 1
     assert listed.json()[0]["noteId"] == str(note_id)
+    assert listed.json()[0]["attachmentCount"] == 0
+    assert listed.json()[0]["attachmentsTotalSize"] == 0
 
-    got = await client.get(f"/v1/notes/{note_id}", headers=headers)
+    got = await client.get(f"/v1/notes/{note_id}/body", headers=headers)
     assert got.status_code == 200
     assert got.content == blob
-    assert got.headers["etag"] == f'"{body["etag"]}"'
+    assert got.headers["etag"] == f'"{body_etag}"'
 
     conflict = await client.put(
-        f"/v1/notes/{note_id}",
+        f"/v1/notes/{note_id}/body",
         headers={
             **headers,
             "Content-Type": "application/octet-stream",
@@ -135,5 +139,5 @@ async def test_notes_crud_flow(client, auth_headers):
     deleted = await client.delete(f"/v1/notes/{note_id}", headers=headers)
     assert deleted.status_code == 204
 
-    missing = await client.get(f"/v1/notes/{note_id}", headers=headers)
+    missing = await client.get(f"/v1/notes/{note_id}/body", headers=headers)
     assert missing.status_code == 404

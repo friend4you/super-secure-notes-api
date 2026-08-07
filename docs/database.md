@@ -16,7 +16,8 @@ users
   └── upload_sessions (1:N)
 
 notes
-  ├── note_blobs (1:1)
+  ├── note_blobs (1:1, body SSNT)
+  ├── note_attachments (1:N)
   └── note_shares (1:N)
 
 upload_sessions
@@ -93,7 +94,7 @@ CREATE TABLE notes (
     note_id         UUID NOT NULL,
     title           TEXT NOT NULL,
     updated_at      BIGINT NOT NULL,         -- Unix seconds (matches mobile UInt64)
-    etag            TEXT NOT NULL,           -- SHA-256 hex of blob or revision counter
+    etag            TEXT NOT NULL,           -- composite SHA-256 hex (body + attachments)
     sync_state      TEXT NOT NULL DEFAULT 'synced'
                     CHECK (sync_state IN ('synced', 'pending')),
     deleted_at      TIMESTAMPTZ,             -- soft delete tombstone
@@ -104,13 +105,16 @@ CREATE TABLE notes (
 CREATE INDEX notes_user_active_idx ON notes (user_id) WHERE deleted_at IS NULL;
 ```
 
+`updated_at` is max(body SSNT `updated_at`, max attachment `updated_at`).  
+`etag` is composite: SHA-256 hex of `body_etag + "|" +` sorted `attachmentId:attachment_etag` pairs.
+
 `sync_state` on server reflects last successful upload. Client may keep its own `pendingSync` until upload succeeds.
 
 ---
 
 ### `note_blobs`
 
-Encrypted `.note` wire format (`SSNT` magic). One blob per note.
+Body-only SSNT (`SSNT` magic). One body per note; no trailing attachment bytes.
 
 ```sql
 CREATE TABLE note_blobs (
@@ -125,9 +129,32 @@ CREATE TABLE note_blobs (
 
 ---
 
+### `note_attachments`
+
+Opaque encrypted attachment files, separate from the body for lazy download.
+
+```sql
+CREATE TABLE note_attachments (
+    user_id         UUID NOT NULL,
+    note_id         UUID NOT NULL,
+    attachment_id   UUID NOT NULL,
+    data            BYTEA NOT NULL,
+    size_bytes      BIGINT NOT NULL,
+    etag            TEXT NOT NULL,           -- SHA-256 hex of attachment bytes
+    content_type    TEXT,                   -- optional plaintext UI hint
+    updated_at      BIGINT NOT NULL,         -- Unix seconds (server-set on PUT)
+    PRIMARY KEY (user_id, note_id, attachment_id),
+    FOREIGN KEY (user_id, note_id) REFERENCES notes(user_id, note_id) ON DELETE CASCADE
+);
+
+CREATE INDEX note_attachments_user_note_idx ON note_attachments (user_id, note_id);
+```
+
+---
+
 ### `note_shares`
 
-Share grants. **Pointer** to owner's blob; per-recipient wrapped FEK.
+Share grants. **Pointer** to owner's note parts; per-recipient wrapped FEK.
 
 ```sql
 CREATE TABLE note_shares (
@@ -152,13 +179,14 @@ CREATE INDEX note_shares_owner_note_idx ON note_shares (owner_id, note_id);
 
 ### `upload_sessions`
 
-Chunked uploads for blobs > 10 MB.
+Chunked uploads for **attachments** > 10 MB. New sessions require `attachment_id`.
 
 ```sql
 CREATE TABLE upload_sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     note_id         UUID NOT NULL,
+    attachment_id   UUID,                   -- required for new sessions
     total_size      BIGINT NOT NULL,
     chunk_size      INTEGER NOT NULL DEFAULT 5242880,  -- 5 MB
     received_chunks INTEGER NOT NULL DEFAULT 0,
@@ -170,6 +198,8 @@ CREATE TABLE upload_sessions (
 );
 
 CREATE INDEX upload_sessions_user_note_idx ON upload_sessions (user_id, note_id);
+CREATE INDEX upload_sessions_user_note_attachment_idx
+    ON upload_sessions (user_id, note_id, attachment_id);
 ```
 
 Sessions expire after 24 hours; cron or lazy cleanup deletes `in_progress` / `aborted` sessions.
@@ -187,7 +217,7 @@ CREATE TABLE upload_chunks (
 );
 ```
 
-On `complete`: assemble chunks in order → validate SSNT → write `note_blobs` + update `notes` → delete session and chunks.
+On `complete`: assemble chunks in order → write `note_attachments` + recompute note sync metadata → delete session and chunks.
 
 ---
 
@@ -196,18 +226,19 @@ On `complete`: assemble chunks in order → validate SSNT → write `note_blobs`
 | Operation | Query |
 |-----------|-------|
 | User's notes | `SELECT * FROM notes WHERE user_id = $1 AND deleted_at IS NULL` |
+| Attachment manifest | `SELECT attachment_id, size_bytes, etag, updated_at, content_type FROM note_attachments WHERE ...` |
 | Shared with me | `JOIN note_shares ON ... WHERE recipient_id = $1` + owner's `notes` for metadata |
 | Public key | `vault_headers.public_key WHERE user_id = $1` |
 | Share lookup | `users WHERE lower(email) = lower($1)` |
 
 ## Migrations
 
-Use Alembic. Initial migration creates all tables above.
+Use Alembic. Migration `005` adds `note_attachments` and `upload_sessions.attachment_id`.
 
 ## Local Docker
 
 ```yaml
-# docker-compose.yml (planned)
+# docker-compose.yml
 services:
   db:
     image: postgres:16
