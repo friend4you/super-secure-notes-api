@@ -11,18 +11,14 @@ from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.errors import APIError
 from app.models import UploadChunk, UploadSession, User
-from app.notes.constants import (
-    CHUNK_SIZE_BYTES,
-    CHUNK_THRESHOLD_BYTES,
-    UPLOAD_SESSION_TTL_HOURS,
-)
+from app.notes.constants import CHUNK_SIZE_BYTES, UPLOAD_SESSION_TTL_HOURS
 from app.notes.schemas import (
     AttachmentUploadResponse,
     CompleteUploadRequest,
     InitUploadRequest,
     InitUploadResponse,
 )
-from app.notes.service import get_active_note, persist_attachment
+from app.notes.service import finalize_chunked_upload, get_active_note
 
 router = APIRouter(prefix="/notes", tags=["uploads"])
 
@@ -125,13 +121,6 @@ async def init_upload(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InitUploadResponse:
-    if body.totalSize <= CHUNK_THRESHOLD_BYTES:
-        raise APIError(
-            400,
-            "validation_error",
-            "Total size must exceed 10 MB; use simple PUT instead.",
-        )
-
     note = await get_active_note(db, user.id, note_id)
     if note is None:
         raise APIError(404, "note_not_found", "Note not found.")
@@ -239,18 +228,19 @@ async def complete_upload(
     if len(chunks) != session.expected_chunks:
         raise APIError(400, "validation_error", "Upload is missing chunks.")
 
-    assembled = b"".join(chunk.data for chunk in chunks)
-    if len(assembled) != session.total_size:
+    total_chunk_bytes = sum(len(chunk.data) for chunk in chunks)
+    if total_chunk_bytes != session.total_size:
         raise APIError(400, "validation_error", "Assembled blob size mismatch.")
 
     if_match = body.ifMatch if body else None
     content_type = body.contentType if body else None
-    response = await persist_attachment(
+    response = await finalize_chunked_upload(
         db,
         user.id,
         note_id,
         attachment_id,
-        assembled,
+        upload_id,
+        session.total_size,
         content_type=content_type,
         if_match=if_match,
     )

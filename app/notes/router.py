@@ -9,10 +9,9 @@ from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.errors import APIError
 from app.models import Note, NoteBlob, User
-from app.notes.constants import MAX_SIMPLE_UPLOAD_BYTES
+from app.notes.constants import MAX_BODY_BYTES
 from app.notes.schemas import (
     AttachmentSummaryResponse,
-    AttachmentUploadResponse,
     NoteSummaryResponse,
     NoteUploadResponse,
 )
@@ -21,10 +20,11 @@ from app.notes.service import (
     attachment_to_summary,
     compute_etag,
     delete_attachment,
+    expected_attachment_chunk_size,
     get_active_note,
     get_note_attachment,
+    get_note_attachment_chunk,
     list_note_attachments,
-    persist_attachment,
     persist_note_body,
     soft_delete_note,
 )
@@ -103,7 +103,7 @@ async def put_note_body(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> NoteUploadResponse:
     body = await request.body()
-    if len(body) > MAX_SIMPLE_UPLOAD_BYTES:
+    if len(body) > MAX_BODY_BYTES:
         raise APIError(
             400,
             "validation_error",
@@ -132,12 +132,13 @@ async def list_attachments(
 
 
 @router.get(
-    "/{note_id}/attachments/{attachment_id}",
-    summary="Download attachment",
+    "/{note_id}/attachments/{attachment_id}/chunks/{chunk_index}",
+    summary="Download attachment chunk",
 )
-async def get_attachment(
+async def get_attachment_chunk(
     note_id: UUID,
     attachment_id: UUID,
+    chunk_index: int,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
@@ -149,43 +150,22 @@ async def get_attachment(
     if attachment is None:
         raise APIError(404, "attachment_not_found", "Attachment not found.")
 
+    expected_size = expected_attachment_chunk_size(
+        attachment.size_bytes, chunk_index
+    )
+    chunk = await get_note_attachment_chunk(
+        db, user.id, note_id, attachment_id, chunk_index
+    )
+    if chunk is None:
+        raise APIError(404, "attachment_not_found", "Attachment chunk not found.")
+
+    if len(chunk.data) != expected_size:
+        raise APIError(500, "internal_error", "Stored chunk size mismatch.")
+
     return Response(
-        content=attachment.data,
+        content=chunk.data,
         media_type="application/octet-stream",
         headers={"ETag": f'"{attachment.etag}"'},
-    )
-
-
-@router.put(
-    "/{note_id}/attachments/{attachment_id}",
-    response_model=AttachmentUploadResponse,
-    summary="Upload or replace attachment (≤ 10 MB)",
-)
-async def put_attachment(
-    note_id: UUID,
-    attachment_id: UUID,
-    request: Request,
-    user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
-    content_type: Annotated[str | None, Query(alias="contentType")] = None,
-) -> AttachmentUploadResponse:
-    data = await request.body()
-    if len(data) > MAX_SIMPLE_UPLOAD_BYTES:
-        raise APIError(
-            400,
-            "validation_error",
-            "Attachment exceeds 10 MB; use chunked upload.",
-        )
-
-    return await persist_attachment(
-        db,
-        user.id,
-        note_id,
-        attachment_id,
-        data,
-        content_type=content_type,
-        if_match=if_match,
     )
 
 

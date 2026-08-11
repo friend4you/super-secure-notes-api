@@ -25,6 +25,8 @@ class AttachmentSummaryResponse(BaseModel):
     etag: str
     updatedAt: int
     contentType: str | None = None
+    totalChunks: int
+    chunkSize: int
 
 
 class AttachmentUploadResponse(BaseModel):

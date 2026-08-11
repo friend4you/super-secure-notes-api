@@ -9,6 +9,7 @@ from tests.fixtures import make_note_blob
 from tests.support import (
     WRAPPED_FEK_B64,
     create_note,
+    download_attachment_chunks,
     large_attachment_bytes,
     login_user,
     register_user,
@@ -81,13 +82,16 @@ async def test_acceptance_4_chunked_attachment_upload(client):
 
     await upload_attachment_chunks(client, user["headers"], note_id, attachment_id, data)
 
-    got = await client.get(
-        f"/v1/notes/{note_id}/attachments/{attachment_id}",
+    manifest = await client.get(
+        f"/v1/notes/{note_id}/attachments",
         headers=user["headers"],
     )
-    assert got.status_code == 200
-    assert got.content == data
-    assert len(got.content) > 10_485_760
+    total_chunks = manifest.json()[0]["totalChunks"]
+    downloaded = await download_attachment_chunks(
+        client, user["headers"], note_id, attachment_id, total_chunks
+    )
+    assert downloaded == data
+    assert len(downloaded) > 10_485_760
 
 
 @pytest.mark.asyncio

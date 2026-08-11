@@ -73,21 +73,22 @@ note_attachments.* = files              note_id = X  (pointer)
 - Bob unwraps FEK with his **identity private key**, not UDK.
 - **Read-only** — only Alice can PUT body/attachments.
 - Bob hides share: `DELETE /notes/shared/{noteId}` removes his `note_shares` row only.
-- Lazy download: JSON shared download returns `body`; attachments via `/notes/shared/{noteId}/attachments/...`.
+- Lazy download: JSON shared download returns `body`; attachments via chunk GET under `/notes/shared/{noteId}/attachments/.../chunks/{chunkIndex}`.
 
 ## Upload strategy
 
 | Resource | Size | Method |
 |----------|------|--------|
 | Note body | ≤ 10 MB | `PUT /notes/{noteId}/body` |
-| Attachment | ≤ 10 MB | `PUT /notes/{noteId}/attachments/{attachmentId}` |
-| Attachment | > 10 MB | Chunked under `.../attachments/{attachmentId}/uploads` (5 MB chunks) |
+| Attachment | any size | Chunked under `.../attachments/{attachmentId}/uploads` (5 MB chunks) |
+
+Download attachments via `GET .../attachments/{attachmentId}/chunks/{chunkIndex}` for each index 0..`totalChunks-1`.
 
 ## Multi-device sync
 
 - Each note has composite `updated_at` and `etag`.
 - Body PUT may send `If-Match: <composite_etag>`; mismatch → `409 conflict`.
-- Attachment PUT may send `If-Match: <attachment_etag>`.
+- Attachment PUT may send `If-Match: <attachment_etag>` on upload complete.
 - Soft delete via `deleted_at` for tombstone sync across devices.
 - `GET /notes` includes `syncState`, `etag`, `attachmentCount`, `attachmentsTotalSize`.
 

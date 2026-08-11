@@ -17,11 +17,12 @@ users
 
 notes
   ├── note_blobs (1:1, body SSNT)
-  ├── note_attachments (1:N)
+  ├── note_attachments (1:N, metadata)
+  │   └── attachment_chunks (1:N)
   └── note_shares (1:N)
 
 upload_sessions
-  └── upload_chunks (1:N)
+  └── upload_chunks (1:N, temp staging)
 ```
 
 ## Tables
@@ -131,23 +132,41 @@ CREATE TABLE note_blobs (
 
 ### `note_attachments`
 
-Opaque encrypted attachment files, separate from the body for lazy download.
+Attachment metadata (no inline bytes). Bytes live in `attachment_chunks`.
 
 ```sql
 CREATE TABLE note_attachments (
     user_id         UUID NOT NULL,
     note_id         UUID NOT NULL,
     attachment_id   UUID NOT NULL,
-    data            BYTEA NOT NULL,
     size_bytes      BIGINT NOT NULL,
-    etag            TEXT NOT NULL,           -- SHA-256 hex of attachment bytes
+    etag            TEXT NOT NULL,           -- SHA-256 hex of full attachment bytes
     content_type    TEXT,                   -- optional plaintext UI hint
-    updated_at      BIGINT NOT NULL,         -- Unix seconds (server-set on PUT)
+    updated_at      BIGINT NOT NULL,         -- Unix seconds (server-set on upload complete)
     PRIMARY KEY (user_id, note_id, attachment_id),
     FOREIGN KEY (user_id, note_id) REFERENCES notes(user_id, note_id) ON DELETE CASCADE
 );
 
 CREATE INDEX note_attachments_user_note_idx ON note_attachments (user_id, note_id);
+```
+
+---
+
+### `attachment_chunks`
+
+Permanent per-chunk storage (≤ 5 MB per row). Cascade delete with attachment.
+
+```sql
+CREATE TABLE attachment_chunks (
+    user_id         UUID NOT NULL,
+    note_id         UUID NOT NULL,
+    attachment_id   UUID NOT NULL,
+    chunk_index     INTEGER NOT NULL,
+    data            BYTEA NOT NULL,
+    PRIMARY KEY (user_id, note_id, attachment_id, chunk_index),
+    FOREIGN KEY (user_id, note_id, attachment_id)
+        REFERENCES note_attachments(user_id, note_id, attachment_id) ON DELETE CASCADE
+);
 ```
 
 ---
@@ -179,7 +198,7 @@ CREATE INDEX note_shares_owner_note_idx ON note_shares (owner_id, note_id);
 
 ### `upload_sessions`
 
-Chunked uploads for **attachments** > 10 MB. New sessions require `attachment_id`.
+Chunked uploads for **all** attachment sizes. New sessions require `attachment_id`.
 
 ```sql
 CREATE TABLE upload_sessions (
@@ -217,7 +236,7 @@ CREATE TABLE upload_chunks (
 );
 ```
 
-On `complete`: assemble chunks in order → write `note_attachments` + recompute note sync metadata → delete session and chunks.
+On `complete`: promote `upload_chunks` → `attachment_chunks`, upsert `note_attachments` metadata, recompute note sync metadata, delete session and temp chunks.
 
 ---
 
@@ -233,7 +252,7 @@ On `complete`: assemble chunks in order → write `note_attachments` + recompute
 
 ## Migrations
 
-Use Alembic. Migration `005` adds `note_attachments` and `upload_sessions.attachment_id`.
+Use Alembic. Migration `008` drops `note_attachments.data` after splitting into `attachment_chunks`.
 
 ## Local Docker
 

@@ -246,7 +246,9 @@ List attachment manifest (metadata only, no bytes).
     "sizeBytes": 2048,
     "etag": "d4e5f6...",
     "updatedAt": 1700000100,
-    "contentType": "image/jpeg"
+    "contentType": "image/jpeg",
+    "totalChunks": 1,
+    "chunkSize": 5242880
   }
 ]
 ```
@@ -257,40 +259,14 @@ List attachment manifest (metadata only, no bytes).
 
 ---
 
-### `GET /notes/{noteId}/attachments/{attachmentId}`
+### `GET /notes/{noteId}/attachments/{attachmentId}/chunks/{chunkIndex}`
 
-**Response `200 OK`**
-- Body: opaque encrypted bytes (`Content-Type: application/octet-stream`)
-- Header: `ETag: "<attachment_etag>"`
+Download one opaque encrypted chunk (`Content-Type: application/octet-stream`).
 
-**Errors:** `401 unauthorized`, `404 note_not_found`, `404 attachment_not_found`
+- Chunk byte length follows upload rules: full `CHUNK_SIZE_BYTES` (5 MB) except the last index.
+- Header: `ETag: "<attachment_etag>"` (same for all chunks of one attachment).
 
----
-
-### `PUT /notes/{noteId}/attachments/{attachmentId}`
-
-Upload or replace attachment when size **≤ 10 MB**.
-
-**Request:**
-- Body: opaque encrypted bytes
-- Optional query: `contentType` (plaintext metadata for UI placeholders)
-- Optional: `If-Match: "<attachment_etag>"`
-
-**Response `200 OK`:**
-```json
-{
-  "attachmentId": "660e8400-e29b-41d4-a716-446655440010",
-  "sizeBytes": 2048,
-  "etag": "d4e5f6...",
-  "updatedAt": 1700000100,
-  "noteEtag": "a1b2c3...",
-  "contentType": "image/jpeg"
-}
-```
-
-Recomputes composite note etag. `updatedAt` is server Unix seconds.
-
-**Errors:** `400 validation_error` (empty body, size > 10 MB), `404 note_not_found`, `409 conflict`
+**Errors:** `400 validation_error` (invalid index), `401 unauthorized`, `404 note_not_found`, `404 attachment_not_found`
 
 ---
 
@@ -304,17 +280,17 @@ Recomputes composite note etag.
 
 ---
 
-## Chunked upload (attachments > 10 MB)
+## Chunked attachment upload (all sizes)
 
 Constants:
-- `CHUNK_THRESHOLD_BYTES` = 10_485_760 (10 MB)
 - `CHUNK_SIZE_BYTES` = 5_242_880 (5 MB)
+- `MAX_BODY_BYTES` = 10_485_760 (10 MB) — note body PUT only
 
-Note bodies always use simple PUT (≤ 10 MB). Chunked flow is **per attachment** only.
+All attachments use the chunked upload flow regardless of size. Note bodies always use simple PUT (≤ 10 MB).
 
 ### `POST /notes/{noteId}/attachments/{attachmentId}/uploads`
 
-Initiate chunked attachment upload. Note must already exist.
+Initiate chunked attachment upload. Note must already exist. Accepts any `totalSize` ≥ 1.
 
 **Request:**
 ```json
@@ -333,7 +309,7 @@ Initiate chunked attachment upload. Note must already exist.
 }
 ```
 
-**Errors:** `400 validation_error` (totalSize ≤ 10 MB — use simple PUT instead), `404 note_not_found`
+**Errors:** `400 validation_error`, `404 note_not_found`
 
 ---
 
@@ -351,7 +327,7 @@ Initiate chunked attachment upload. Note must already exist.
 
 ### `POST /notes/{noteId}/attachments/{attachmentId}/uploads/{uploadId}/complete`
 
-Assemble chunks into `note_attachments` and recompute composite etag.
+Promote upload chunks into permanent `attachment_chunks` storage and recompute composite etag. No inline bytea assembly.
 
 **Request (optional):**
 ```json
@@ -361,7 +337,7 @@ Assemble chunks into `note_attachments` and recompute composite etag.
 }
 ```
 
-**Response `200 OK`:** same shape as attachment PUT (`AttachmentUploadResponse`).
+**Response `200 OK`:** `AttachmentUploadResponse` (same shape as before).
 
 **Errors:** `400 validation_error`, `409 conflict`, `400` incomplete chunks
 
@@ -469,11 +445,11 @@ Shared attachment manifest (same shape as owner list).
 
 ---
 
-### `GET /notes/shared/{noteId}/attachments/{attachmentId}`
+### `GET /notes/shared/{noteId}/attachments/{attachmentId}/chunks/{chunkIndex}`
 
-Opaque shared attachment bytes with attachment `ETag`.
+Opaque shared attachment chunk bytes with attachment `ETag`. Same chunk size rules as owner download.
 
-**Errors:** `401 unauthorized`, `404 share_not_found`, `404 attachment_not_found`
+**Errors:** `401 unauthorized`, `404 share_not_found`, `404 attachment_not_found`, `400 validation_error`
 
 ---
 

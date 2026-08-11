@@ -1,6 +1,7 @@
 import base64
 import uuid
 
+from app.notes.constants import CHUNK_SIZE_BYTES
 from app.notes.service import compute_composite_etag, compute_etag
 from tests.fixtures import make_large_attachment, make_note_blob, make_vault_header_v2
 
@@ -58,13 +59,13 @@ async def upload_attachment_chunks(
     note_id: uuid.UUID,
     attachment_id: uuid.UUID,
     data: bytes,
-) -> None:
-    from app.notes.constants import CHUNK_SIZE_BYTES
-
+    *,
+    content_type: str = "application/octet-stream",
+) -> dict:
     init = await client.post(
         f"/v1/notes/{note_id}/attachments/{attachment_id}/uploads",
         headers=headers,
-        json={"totalSize": len(data), "contentType": "application/octet-stream"},
+        json={"totalSize": len(data), "contentType": content_type},
     )
     assert init.status_code == 201
     upload_id = init.json()["uploadId"]
@@ -87,9 +88,32 @@ async def upload_attachment_chunks(
     complete = await client.post(
         f"/v1/notes/{note_id}/attachments/{attachment_id}/uploads/{upload_id}/complete",
         headers=headers,
-        json={},
+        json={"contentType": content_type},
     )
     assert complete.status_code == 200
+    return complete.json()
+
+
+async def download_attachment_chunks(
+    client,
+    headers: dict,
+    note_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    total_chunks: int,
+    *,
+    shared: bool = False,
+) -> bytes:
+    prefix = (
+        f"/v1/notes/shared/{note_id}/attachments/{attachment_id}"
+        if shared
+        else f"/v1/notes/{note_id}/attachments/{attachment_id}"
+    )
+    parts: list[bytes] = []
+    for index in range(total_chunks):
+        got = await client.get(f"{prefix}/chunks/{index}", headers=headers)
+        assert got.status_code == 200
+        parts.append(got.content)
+    return b"".join(parts)
 
 
 def vault_header_bytes() -> bytes:

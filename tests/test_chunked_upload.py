@@ -3,7 +3,13 @@ import uuid
 import pytest
 
 from app.notes.constants import CHUNK_SIZE_BYTES
-from tests.support import create_note, large_attachment_bytes, register_user
+from tests.support import (
+    create_note,
+    download_attachment_chunks,
+    large_attachment_bytes,
+    register_user,
+    upload_attachment_chunks,
+)
 
 
 @pytest.fixture
@@ -13,16 +19,21 @@ async def auth_headers(client, credentials):
 
 
 @pytest.mark.asyncio
-async def test_init_upload_rejects_small_size(client, auth_headers):
+async def test_small_file_single_chunk_upload(client, auth_headers):
     note_id, _ = await create_note(client, auth_headers)
     attachment_id = uuid.uuid4()
-    response = await client.post(
-        f"/v1/notes/{note_id}/attachments/{attachment_id}/uploads",
-        headers=auth_headers,
-        json={"totalSize": 10_485_760, "contentType": "application/octet-stream"},
+    data = bytes([0x42] * 2048)
+
+    complete = await upload_attachment_chunks(
+        client, auth_headers, note_id, attachment_id, data
     )
-    assert response.status_code == 400
-    assert response.json()["error"] == "validation_error"
+    assert complete["attachmentId"] == str(attachment_id)
+    assert complete["sizeBytes"] == len(data)
+
+    downloaded = await download_attachment_chunks(
+        client, auth_headers, note_id, attachment_id, total_chunks=1
+    )
+    assert downloaded == data
 
 
 @pytest.mark.asyncio
@@ -67,12 +78,14 @@ async def test_chunked_upload_completes_large_attachment(client, auth_headers):
     assert complete.json()["attachmentId"] == str(attachment_id)
     assert complete.json()["sizeBytes"] == len(data)
 
-    got = await client.get(
-        f"/v1/notes/{note_id}/attachments/{attachment_id}",
-        headers=auth_headers,
+    downloaded = await download_attachment_chunks(
+        client,
+        auth_headers,
+        note_id,
+        attachment_id,
+        total_chunks=init_body["totalChunks"],
     )
-    assert got.status_code == 200
-    assert got.content == data
+    assert downloaded == data
 
 
 @pytest.mark.asyncio

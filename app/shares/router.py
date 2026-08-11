@@ -14,8 +14,10 @@ from app.models import Note, NoteBlob, NoteShare, User
 from app.notes.service import (
     attachment_to_summary,
     compute_etag,
+    expected_attachment_chunk_size,
     get_active_note,
     get_note_attachment,
+    get_note_attachment_chunk,
     list_note_attachments,
 )
 from app.shares.schemas import (
@@ -126,12 +128,13 @@ async def list_shared_attachments(
 
 
 @router.get(
-    "/shared/{note_id}/attachments/{attachment_id}",
-    summary="Download shared attachment",
+    "/shared/{note_id}/attachments/{attachment_id}/chunks/{chunk_index}",
+    summary="Download shared attachment chunk",
 )
-async def get_shared_attachment(
+async def get_shared_attachment_chunk(
     note_id: UUID,
     attachment_id: UUID,
+    chunk_index: int,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
@@ -145,8 +148,20 @@ async def get_shared_attachment(
     if attachment is None:
         raise APIError(404, "attachment_not_found", "Attachment not found.")
 
+    expected_size = expected_attachment_chunk_size(
+        attachment.size_bytes, chunk_index
+    )
+    chunk = await get_note_attachment_chunk(
+        db, share.owner_id, note_id, attachment_id, chunk_index
+    )
+    if chunk is None:
+        raise APIError(404, "attachment_not_found", "Attachment chunk not found.")
+
+    if len(chunk.data) != expected_size:
+        raise APIError(500, "internal_error", "Stored chunk size mismatch.")
+
     return Response(
-        content=attachment.data,
+        content=chunk.data,
         media_type="application/octet-stream",
         headers={"ETag": f'"{attachment.etag}"'},
     )

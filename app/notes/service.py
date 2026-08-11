@@ -1,4 +1,5 @@
 import hashlib
+import math
 import time
 from uuid import UUID
 
@@ -6,7 +7,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import APIError
-from app.models import Note, NoteAttachment, NoteBlob
+from app.models import AttachmentChunk, Note, NoteAttachment, NoteBlob, UploadChunk
+from app.notes.constants import CHUNK_SIZE_BYTES
 from app.notes.schemas import (
     AttachmentSummaryResponse,
     AttachmentUploadResponse,
@@ -18,6 +20,32 @@ from app.parsers.ssnt import NoteMetadata, parse_note_blob
 
 def compute_etag(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+async def compute_upload_etag(db: AsyncSession, upload_id: UUID) -> str:
+    hasher = hashlib.sha256()
+    result = await db.execute(
+        select(UploadChunk)
+        .where(UploadChunk.upload_id == upload_id)
+        .order_by(UploadChunk.chunk_index)
+    )
+    for chunk in result.scalars():
+        hasher.update(chunk.data)
+    return hasher.hexdigest()
+
+
+def total_chunks_for_size(size_bytes: int) -> int:
+    return math.ceil(size_bytes / CHUNK_SIZE_BYTES)
+
+
+def expected_attachment_chunk_size(size_bytes: int, chunk_index: int) -> int:
+    total_chunks = total_chunks_for_size(size_bytes)
+    if chunk_index < 0 or chunk_index >= total_chunks:
+        raise APIError(400, "validation_error", "Invalid chunk index.")
+    if chunk_index < total_chunks - 1:
+        return CHUNK_SIZE_BYTES
+    remainder = size_bytes % CHUNK_SIZE_BYTES
+    return CHUNK_SIZE_BYTES if remainder == 0 else remainder
 
 
 def compute_composite_etag(
@@ -56,6 +84,24 @@ async def list_note_attachments(
     return list(result.scalars().all())
 
 
+async def get_note_attachment_chunk(
+    db: AsyncSession,
+    user_id: UUID,
+    note_id: UUID,
+    attachment_id: UUID,
+    chunk_index: int,
+) -> AttachmentChunk | None:
+    result = await db.execute(
+        select(AttachmentChunk).where(
+            AttachmentChunk.user_id == user_id,
+            AttachmentChunk.note_id == note_id,
+            AttachmentChunk.attachment_id == attachment_id,
+            AttachmentChunk.chunk_index == chunk_index,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_note_attachment(
     db: AsyncSession, user_id: UUID, note_id: UUID, attachment_id: UUID
 ) -> NoteAttachment | None:
@@ -67,6 +113,38 @@ async def get_note_attachment(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def promote_upload_chunks(
+    db: AsyncSession,
+    user_id: UUID,
+    note_id: UUID,
+    attachment_id: UUID,
+    upload_id: UUID,
+) -> None:
+    await db.execute(
+        delete(AttachmentChunk).where(
+            AttachmentChunk.user_id == user_id,
+            AttachmentChunk.note_id == note_id,
+            AttachmentChunk.attachment_id == attachment_id,
+        )
+    )
+
+    chunks_result = await db.execute(
+        select(UploadChunk)
+        .where(UploadChunk.upload_id == upload_id)
+        .order_by(UploadChunk.chunk_index)
+    )
+    for chunk in chunks_result.scalars():
+        db.add(
+            AttachmentChunk(
+                user_id=user_id,
+                note_id=note_id,
+                attachment_id=attachment_id,
+                chunk_index=chunk.chunk_index,
+                data=chunk.data,
+            )
+        )
 
 
 async def attachment_stats(
@@ -262,19 +340,17 @@ async def persist_note_body(
     )
 
 
-async def persist_attachment(
+async def finalize_chunked_upload(
     db: AsyncSession,
     user_id: UUID,
     note_id: UUID,
     attachment_id: UUID,
-    data: bytes,
+    upload_id: UUID,
+    total_size: int,
     *,
     content_type: str | None = None,
     if_match: str | None = None,
 ) -> AttachmentUploadResponse:
-    if not data:
-        raise APIError(400, "validation_error", "Attachment body is required.")
-
     note = await get_active_note(db, user_id, note_id)
     if note is None:
         raise APIError(404, "note_not_found", "Note not found.")
@@ -285,7 +361,7 @@ async def persist_attachment(
         if existing.etag != expected:
             raise APIError(409, "conflict", "Attachment etag does not match.")
 
-    etag = compute_etag(data)
+    etag = await compute_upload_etag(db, upload_id)
     updated_at = int(time.time())
     stored_content_type = content_type
 
@@ -295,29 +371,27 @@ async def persist_attachment(
                 user_id=user_id,
                 note_id=note_id,
                 attachment_id=attachment_id,
-                data=data,
-                size_bytes=len(data),
+                size_bytes=total_size,
                 etag=etag,
                 content_type=content_type,
                 updated_at=updated_at,
             )
         )
     else:
-        existing.data = data
-        existing.size_bytes = len(data)
+        existing.size_bytes = total_size
         existing.etag = etag
         existing.updated_at = updated_at
         if content_type is not None:
             existing.content_type = content_type
         stored_content_type = existing.content_type
 
+    await promote_upload_chunks(db, user_id, note_id, attachment_id, upload_id)
     await db.flush()
     note_etag, _ = await recompute_note_sync_metadata(db, user_id, note_id)
-    await db.commit()
 
     return AttachmentUploadResponse(
         attachmentId=attachment_id,
-        sizeBytes=len(data),
+        sizeBytes=total_size,
         etag=etag,
         updatedAt=updated_at,
         noteEtag=note_etag,
@@ -352,6 +426,8 @@ def attachment_to_summary(attachment: NoteAttachment) -> AttachmentSummaryRespon
         etag=attachment.etag,
         updatedAt=attachment.updated_at,
         contentType=attachment.content_type,
+        totalChunks=total_chunks_for_size(attachment.size_bytes),
+        chunkSize=CHUNK_SIZE_BYTES,
     )
 
 

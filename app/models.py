@@ -122,19 +122,46 @@ class NoteAttachment(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     attachment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     etag: Mapped[str] = mapped_column(Text, nullable=False)
     content_type: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     note: Mapped[Note] = relationship(back_populates="attachments")
+    chunks: Mapped[list["AttachmentChunk"]] = relationship(
+        back_populates="attachment", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         PrimaryKeyConstraint("user_id", "note_id", "attachment_id"),
         ForeignKeyConstraint(
             ["user_id", "note_id"],
             ["notes.user_id", "notes.note_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class AttachmentChunk(Base):
+    __tablename__ = "attachment_chunks"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    attachment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    attachment: Mapped[NoteAttachment] = relationship(back_populates="chunks")
+
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "note_id", "attachment_id", "chunk_index"),
+        ForeignKeyConstraint(
+            ["user_id", "note_id", "attachment_id"],
+            [
+                "note_attachments.user_id",
+                "note_attachments.note_id",
+                "note_attachments.attachment_id",
+            ],
             ondelete="CASCADE",
         ),
     )
