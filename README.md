@@ -1,17 +1,10 @@
 # super-secure-notes-api
 
-Python REST API for [superSecureNotes](https://github.com/) — the iOS/macOS encrypted notes app.
+REST API for [superSecureNotes](https://github.com/friend4you/superSecureNotes) — the iOS/macOS encrypted notes app.
 
 The server stores **opaque encrypted bytes** only (vault headers, note bodies, attachments). It never holds vault keys, note FEKs, or decrypted content. Account passwords are hashed for login; vault crypto stays on the client.
 
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/SPEC.md](docs/SPEC.md) | Full specification — API, database, sync, sharing |
-| [docs/api.md](docs/api.md) | REST endpoint reference |
-| [docs/database.md](docs/database.md) | PostgreSQL schema |
-| [docs/architecture.md](docs/architecture.md) | System design and crypto boundaries |
+I'm a mobile developer; this backend was built with AI assistance.
 
 ## Quick start (Docker)
 
@@ -81,6 +74,23 @@ All routes are under `/v1`. Authenticated endpoints require `Authorization: Bear
 | **uploads** | Chunked upload for attachments > 10 MB |
 | **sharing** | Read-only note sharing (body + lazy attachments) |
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/SPEC.md](docs/SPEC.md) | Full specification — API, database, sync, sharing |
+| [docs/architecture.md](docs/architecture.md) | System design and crypto boundaries |
+| [docs/api.md](docs/api.md) | REST endpoint reference |
+| [docs/api-errors.md](docs/api-errors.md) | Error codes for mobile clients |
+| [docs/database.md](docs/database.md) | PostgreSQL schema |
+| [docs/shared-notes-api.md](docs/shared-notes-api.md) | Sharing flow for the mobile client |
+| [docs/mobile-save-guide.md](docs/mobile-save-guide.md) | Saving note body vs attachments |
+| [docs/mobile-upload-guide.md](docs/mobile-upload-guide.md) | Chunked attachment upload |
+| [docs/mobile-sync-guide.md](docs/mobile-sync-guide.md) | Chunked attachment download |
+| [docs/mobile-migration-chunked-attachments.md](docs/mobile-migration-chunked-attachments.md) | Breaking change: chunk-only attachments |
+
+Design history for later API changes lives in [`openspec/`](openspec/).
+
 ## Related repository
 
-Mobile app: `../superSecureNotes`
+Mobile app: [friend4you/superSecureNotes](https://github.com/friend4you/superSecureNotes)
