@@ -43,7 +43,7 @@ The server **must not** decrypt vault keys, note payloads, or FEKs.
 
 | Client area | Endpoints |
 |-------------|-----------|
-| Auth | `POST /auth/register`, `/login`, `/logout`, `/refresh` |
+| Auth | `POST /auth/register`, `/login`, `/logout`, `/refresh`, `/delete-account` |
 | Vault | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
 | Notes | `GET /notes`, `GET/PUT /notes/{noteId}/body`, `DELETE /notes/{noteId}` |
 | Attachments | `GET/PUT/DELETE /notes/{noteId}/attachments...`, chunked uploads |

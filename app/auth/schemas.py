@@ -9,6 +9,10 @@ class CredentialsRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(min_length=1)
+
+
 class RefreshRequest(BaseModel):
     refreshToken: str = Field(min_length=1)
 

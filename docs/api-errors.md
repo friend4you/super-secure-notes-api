@@ -96,7 +96,7 @@ Copy or codegen from this JSON block:
     "code": "invalid_credentials",
     "httpStatus": 401,
     "message": "Invalid email or password.",
-    "endpoints": ["POST /v1/auth/login"]
+    "endpoints": ["POST /v1/auth/login", "POST /v1/auth/delete-account"]
   },
   {
     "code": "email_already_exists",

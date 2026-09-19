@@ -101,6 +101,25 @@ Revokes all refresh tokens for the user (or current session — implementer choi
 
 ---
 
+### `POST /auth/delete-account`
+
+**Headers:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "password": "secret"
+}
+```
+
+**Response `204 No Content`**
+
+Permanently deletes the authenticated user's account. Requires the current password. Hard-deletes the user row; database cascades remove vault header, notes, attachments, upload sessions, refresh tokens, and share grants. The email becomes available for re-registration. Recipients lose access to notes shared by the deleted owner.
+
+**Errors:** `401 unauthorized`, `401 invalid_credentials`, `400 validation_error`
+
+---
+
 ## Vault
 
 ### `GET /vault/header`

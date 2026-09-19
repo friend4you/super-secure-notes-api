@@ -79,7 +79,7 @@ All routes are under `/v1`. Authenticated endpoints require `Authorization: Bear
 
 | Tag | Endpoints |
 |-----|-----------|
-| **auth** | `POST /auth/register`, `/login`, `/refresh`, `/logout` |
+| **auth** | `POST /auth/register`, `/login`, `/refresh`, `/logout`, `/delete-account` |
 | **vault** | `GET/PUT /vault/header`, `GET /users/public-key?email=` |
 | **notes** | `GET /notes`, `GET/PUT /notes/{noteId}/body`, `DELETE /notes/{noteId}`, attachment CRUD |
 | **uploads** | Chunked upload for attachments > 10 MB |

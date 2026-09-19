@@ -8,6 +8,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.schemas import (
     AuthSuccessResponse,
     CredentialsRequest,
+    DeleteAccountRequest,
     RefreshRequest,
     RefreshResponse,
     UserResponse,
@@ -101,4 +102,22 @@ async def logout(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     await revoke_all_refresh_tokens(db, user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/delete-account",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete account",
+)
+async def delete_account(
+    body: DeleteAccountRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    if not verify_password(body.password, user.password_hash):
+        raise APIError(401, "invalid_credentials", "Invalid email or password.")
+
+    await db.delete(user)
+    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
