@@ -9,6 +9,20 @@ async def test_health(client):
 
 
 @pytest.mark.asyncio
+async def test_privacy_policy_page(client):
+    for path in ("/privacy", "/privacy-policy"):
+        response = await client.get(path)
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        body = response.text
+        assert "Privacy Policy" in body
+        assert "Super Secure Notes" in body
+        assert "zero-knowledge" in body.lower() or "encrypted on your device" in body.lower()
+        assert "delete your account" in body.lower()
+        assert "vlad.arsenyuk@gmail.com" in body
+
+
+@pytest.mark.asyncio
 async def test_register_login_logout_refresh_flow(client, credentials):
     register = await client.post("/v1/auth/register", json=credentials)
     assert register.status_code == 201

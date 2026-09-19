@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.auth.router import router as auth_router
 from app.notes.router import router as notes_router
 from app.notes.uploads import router as uploads_router
+from app.privacy import router as privacy_router
 from app.shares.router import router as shares_router
 from app.vault.router import router as vault_router
 from app.errors import APIError
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
         """Returns 200 when the API process is running."""
         return {"status": "ok"}
 
+    app.include_router(privacy_router)
     app.include_router(auth_router, prefix="/v1")
     app.include_router(vault_router, prefix="/v1")
     app.include_router(uploads_router, prefix="/v1")

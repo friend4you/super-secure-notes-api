@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_days: int = 30
+    privacy_contact_email: str = "vlad.arsenyuk@gmail.com"
 
     @field_validator("database_url")
     @classmethod

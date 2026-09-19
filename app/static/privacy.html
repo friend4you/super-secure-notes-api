@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — Super Secure Notes</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #1a1a1a;
+      --muted: #555;
+      --bg: #fff;
+      --border: #e5e5e5;
+      --accent: #2563eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #f0f0f0;
+        --muted: #aaa;
+        --bg: #111;
+        --border: #333;
+        --accent: #60a5fa;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      margin: 0;
+      padding: 1.5rem;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h3 { font-size: 1rem; margin-top: 1.25rem; }
+    p, li { color: var(--text); }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    .summary {
+      background: var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .summary strong { display: block; margin-bottom: 0.5rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--border); }
+    a { color: var(--accent); }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: 0.35rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="meta"><strong>Super Secure Notes</strong> · Effective date: March 19, 2026 · Last updated: March 19, 2026</p>
+
+    <div class="summary">
+      <strong>Summary</strong>
+      Super Secure Notes is an encrypted notes app. Your note content is encrypted on your device before it reaches our servers. We cannot read your notes, vault keys, or attachments. We store your account email, encrypted data blobs, and minimal metadata needed to sync and share notes.
+    </div>
+
+    <h2>1. Who we are</h2>
+    <p>
+      This Privacy Policy describes how <strong>Super Secure Notes</strong> (“the App”, “we”, “us”) collects, uses, stores, and deletes information when you use the iOS app and its cloud sync service (the “Service”).
+    </p>
+    <p>
+      <strong>Contact:</strong> For privacy questions or requests, email
+      <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>.
+    </p>
+
+    <h2>2. What we collect and store</h2>
+
+    <h3>2.1 Account information</h3>
+    <ul>
+      <li><strong>Email address</strong> — used to create your account, log in, and identify you when sharing notes with other users.</li>
+      <li><strong>Password</strong> — stored only as a one-way bcrypt hash. We never store your password in plain text and cannot recover it.</li>
+      <li><strong>Account creation date</strong> — stored with your user record.</li>
+      <li><strong>Authentication tokens</strong> — short-lived access tokens (JWT) and refresh tokens. Refresh tokens are stored only as SHA-256 hashes.</li>
+    </ul>
+
+    <h3>2.2 Encrypted vault and notes (zero-knowledge)</h3>
+    <p>
+      All note content is encrypted on your device before upload. The server stores opaque encrypted bytes and <strong>cannot decrypt</strong> your vault, notes, or attachments.
+    </p>
+    <ul>
+      <li><strong>Vault header</strong> — encrypted blob containing your cryptographic keys (wrapped on-device). Stored as opaque bytes.</li>
+      <li><strong>Identity public key</strong> — a 32-byte public key extracted from your vault header so other users can share notes with you. This is not secret and cannot decrypt your data alone.</li>
+      <li><strong>Note bodies and attachments</strong> — encrypted files stored as opaque bytes.</li>
+      <li><strong>Wrapped file encryption keys (sharing)</strong> — when you share a note, the App encrypts the note key for the recipient’s public key. We store that wrapped key; we cannot unwrap it.</li>
+    </ul>
+
+    <h3>2.3 Note metadata (not encrypted)</h3>
+    <p>To power search, sync, and list views, the server indexes a small amount of plaintext metadata parsed from encrypted note headers:</p>
+    <ul>
+      <li><strong>Note title</strong></li>
+      <li><strong>Note identifier</strong>, <strong>last updated time</strong>, and <strong>sync state</strong></li>
+      <li><strong>Attachment count and total size</strong></li>
+      <li><strong>Soft-delete timestamp</strong> (for multi-device sync)</li>
+    </ul>
+    <p>Note titles are visible to us in plain text. Do not put highly sensitive information in titles if that matters to your threat model.</p>
+
+    <h3>2.4 Sharing data</h3>
+    <ul>
+      <li><strong>Share relationships</strong> — which notes you shared, with which recipient accounts, and when.</li>
+      <li><strong>Recipient email</strong> — used when you share a note by email address.</li>
+    </ul>
+
+    <h3>2.5 Temporary upload data</h3>
+    <p>
+      Large attachments are uploaded in encrypted chunks. Temporary upload session records and chunk data are kept only until the upload completes or the session expires (up to 24 hours), then deleted.
+    </p>
+
+    <h2>3. What we do NOT collect</h2>
+    <ul>
+      <li>Decrypted note text, attachments, or vault keys</li>
+      <li>Location data</li>
+      <li>Contacts, photos, or camera/microphone data (unless you choose to attach a file to a note — that file is encrypted before upload)</li>
+      <li>Advertising identifiers or cross-app tracking data</li>
+      <li>Analytics, crash reporting, or behavioral profiling SDKs (none are built into the App or this API)</li>
+      <li>Payment or financial information (the App does not process payments through us)</li>
+    </ul>
+
+    <h2>4. How we use your information</h2>
+    <ul>
+      <li>Authenticate you and keep your session secure</li>
+      <li>Store and sync your encrypted notes across your devices</li>
+      <li>Enable optional note sharing with other Super Secure Notes users you choose</li>
+      <li>Operate, maintain, and protect the Service (e.g., abuse prevention, error logs without note content)</li>
+    </ul>
+    <p>We do <strong>not</strong> sell your personal information. We do <strong>not</strong> use your data for advertising.</p>
+
+    <h2>5. Encryption and security</h2>
+    <ul>
+      <li><strong>Client-side encryption</strong> — Notes, attachments, and vault data are encrypted on your device before transmission.</li>
+      <li><strong>HTTPS</strong> — All communication between the App and our servers uses TLS encryption in transit.</li>
+      <li><strong>Server storage</strong> — Data is stored in a PostgreSQL database hosted on secure cloud infrastructure.</li>
+      <li><strong>Access controls</strong> — Each user’s data is isolated by account. Shared notes are accessible only to users with an explicit share grant.</li>
+    </ul>
+
+    <h2>6. Data retention and deletion</h2>
+    <ul>
+      <li>Your data is retained while your account is active.</li>
+      <li>When you delete a note, the encrypted body and attachments are removed; a sync tombstone may remain briefly for multi-device reconciliation.</li>
+      <li>When you <strong>delete your account</strong> in the App, we permanently delete your user record and all associated data (vault, notes, attachments, tokens, and share grants) from our servers. This action is irreversible.</li>
+      <li>After account deletion, your email address may be used to register a new account.</li>
+    </ul>
+
+    <h2>7. Third parties</h2>
+    <p>
+      We use cloud hosting providers to run the API and database. They process data on our behalf under their own security and privacy terms. We do not share your data with advertisers, data brokers, or social networks.
+    </p>
+    <p>
+      If you share a note with another user, that user can access the encrypted note content we store for the share grant, decrypted only on their device with their private key.
+    </p>
+
+    <h2>8. Your rights and choices</h2>
+    <ul>
+      <li><strong>Access</strong> — Your notes are available in the App on any device where you are signed in.</li>
+      <li><strong>Correction</strong> — Edit notes directly in the App.</li>
+      <li><strong>Deletion</strong> — Delete individual notes or your entire account in the App settings.</li>
+      <li><strong>Export</strong> — Your encrypted data remains on your devices; contact us if you need help with data portability.</li>
+      <li><strong>EU/EEA/UK (GDPR)</strong> — You may request access, correction, deletion, or restriction by contacting us at the email above. You may lodge a complaint with your local supervisory authority.</li>
+      <li><strong>California (CCPA/CPRA)</strong> — We do not sell personal information. You may request deletion or disclosure of categories of data we collect by contacting us.</li>
+    </ul>
+
+    <h2>9. Children’s privacy</h2>
+    <p>
+      The App is not directed to children under 13 (or the minimum age required in your country). We do not knowingly collect personal information from children. If you believe a child has provided us data, contact us and we will delete it.
+    </p>
+
+    <h2>10. International transfers</h2>
+    <p>
+      Your data may be processed and stored in countries other than your own, including where our hosting providers operate. We rely on appropriate safeguards required by applicable law.
+    </p>
+
+    <h2>11. App Store privacy labels (summary for Apple review)</h2>
+    <p>The following reflects our App Privacy practices in App Store Connect:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Data type</th>
+          <th>Linked to you</th>
+          <th>Used for tracking</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Email address</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>Account creation, login, sharing</td>
+        </tr>
+        <tr>
+          <td>User ID</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>App functionality, sync</td>
+        </tr>
+        <tr>
+          <td>Other user content (notes, attachments)</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>App functionality (stored encrypted; server cannot read content)</td>
+        </tr>
+        <tr>
+          <td>Name (note titles only)</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>App functionality (plaintext metadata for lists/sync)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Tracking:</strong> We do not track you across apps or websites owned by other companies.</p>
+
+    <h2>12. Changes to this policy</h2>
+    <p>
+      We may update this Privacy Policy from time to time. We will post the revised policy at this URL and update the “Last updated” date. Continued use of the App after changes means you accept the updated policy.
+    </p>
+
+    <h2>13. Contact us</h2>
+    <p>
+      Questions about this Privacy Policy or your data:<br>
+      <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>
+    </p>
+  </main>
+</body>
+</html>

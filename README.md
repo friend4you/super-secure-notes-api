@@ -19,6 +19,7 @@ docker compose up --build
 | http://localhost:8000/v1 | API base path |
 | http://localhost:8000/docs | OpenAPI (Swagger UI) |
 | http://localhost:8000/health | Health check |
+| http://localhost:8000/privacy | Privacy Policy (App Store URL) |
 
 The API container runs Alembic migrations on startup, then serves with Uvicorn. It listens on `$PORT` (default 8000) so the same image works locally and on Render.
 
@@ -52,6 +53,7 @@ uvicorn app.main:app --reload --port 8000
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql+asyncpg://ssn:ssn@localhost:5432/supersecurenotes` | Async SQLAlchemy connection string. Render's `postgres://` / `postgresql://` URLs are accepted and rewritten. |
 | `JWT_SECRET` | `dev-secret-change-in-production` | HS256 signing key for access tokens. Required (non-default) on Render. |
+| `PRIVACY_CONTACT_EMAIL` | `vlad.arsenyuk@gmail.com` | Contact email shown on the public Privacy Policy page (`/privacy`). |
 
 ### Deploy on Render (Docker)
 
