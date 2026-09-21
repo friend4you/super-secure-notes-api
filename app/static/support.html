@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support — Super Secure Notes</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #1a1a1a;
+      --muted: #555;
+      --bg: #fff;
+      --border: #e5e5e5;
+      --accent: #2563eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #f0f0f0;
+        --muted: #aaa;
+        --bg: #111;
+        --border: #333;
+        --accent: #60a5fa;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      margin: 0;
+      padding: 1.5rem;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h3 { font-size: 1rem; margin-top: 1.25rem; }
+    p, li { color: var(--text); }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    a { color: var(--accent); }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: 0.35rem; }
+    dl { margin: 0; }
+    dt { font-weight: 600; margin-top: 1rem; }
+    dd { margin: 0.35rem 0 0 0; color: var(--text); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Support</h1>
+    <p class="meta"><strong>Super Secure Notes</strong> · Encrypted notes for iPhone</p>
+
+    <h2>Contact us</h2>
+    <p>
+      For help with your account, sync, sharing, or privacy questions, email us at
+      <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>.
+    </p>
+    <p class="meta">We usually reply within 2–3 business days.</p>
+
+    <h2>Frequently asked questions</h2>
+
+    <h3>Account &amp; login</h3>
+    <dl>
+      <dt>How do I create an account?</dt>
+      <dd>Register in the app with your email and password.</dd>
+
+      <dt>I forgot my password — can you reset it?</dt>
+      <dd>
+        No. Passwords are stored as one-way hashes; we cannot recover them. Your vault and notes
+        are encrypted with keys derived from your password. If you lose your password and do not
+        have access on another device, your encrypted data cannot be recovered. You must create
+        a new account if you have no local backup.
+      </dd>
+
+      <dt>How do I delete my account?</dt>
+      <dd>
+        Open the app → Settings → Delete Account. Enter your password to confirm.
+        This permanently deletes your account and all server-side data.
+      </dd>
+    </dl>
+
+    <h3>Notes &amp; sync</h3>
+    <dl>
+      <dt>Are my notes readable on your servers?</dt>
+      <dd>
+        No. Notes and attachments are encrypted on your device before upload.
+        We store encrypted blobs and minimal sync metadata only.
+      </dd>
+
+      <dt>Notes not syncing?</dt>
+      <dd>
+        Check your internet connection, unlock the vault, and try again.
+        The first request after a period of inactivity may take longer while the service starts
+        (Render cold start).
+      </dd>
+
+      <dt>I deleted a note — can I recover it?</dt>
+      <dd>
+        Only if it still exists on another device that has not synced the deletion.
+      </dd>
+    </dl>
+
+    <h3>Sharing</h3>
+    <dl>
+      <dt>How does sharing work?</dt>
+      <dd>
+        Enter the recipient’s registered email address. The note is encrypted for their key
+        and shared read-only. Only you can edit the note.
+      </dd>
+
+      <dt>Recipient not found?</dt>
+      <dd>
+        They must have a Super Secure Notes account registered with that exact email address.
+        Sharing is private and encrypted end-to-end between accounts.
+      </dd>
+    </dl>
+
+    <h3>Biometrics</h3>
+    <dl>
+      <dt>Face ID / Touch ID</dt>
+      <dd>
+        Optional. You can enable biometrics for faster unlock, or always unlock with your password.
+      </dd>
+    </dl>
+
+    <h2>Privacy</h2>
+    <p>
+      Read our <a href="{{PRIVACY_URL}}">Privacy Policy</a>.
+    </p>
+
+    <h2>App info</h2>
+    <ul>
+      <li><strong>Platform:</strong> iPhone (iOS)</li>
+      <li><strong>Version:</strong> See the App Store listing for the current version</li>
+      <li><strong>Developer:</strong> Vlad Arsenyuk</li>
+    </ul>
+  </main>
+</body>
+</html>

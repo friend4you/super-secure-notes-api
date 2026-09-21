@@ -23,6 +23,20 @@ async def test_privacy_policy_page(client):
 
 
 @pytest.mark.asyncio
+async def test_support_page(client):
+    response = await client.get("/support")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "Support" in body
+    assert "Super Secure Notes" in body
+    assert "vlad.arsenyuk@gmail.com" in body
+    assert "I forgot my password" in body
+    assert 'href="/privacy"' in body
+    assert "Encrypted notes for iPhone" in body
+
+
+@pytest.mark.asyncio
 async def test_register_login_logout_refresh_flow(client, credentials):
     register = await client.post("/v1/auth/register", json=credentials)
     assert register.status_code == 201

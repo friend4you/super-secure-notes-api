@@ -20,6 +20,7 @@ docker compose up --build
 | http://localhost:8000/docs | OpenAPI (Swagger UI) |
 | http://localhost:8000/health | Health check |
 | http://localhost:8000/privacy | Privacy Policy (App Store URL) |
+| http://localhost:8000/support | Support page (App Store URL) |
 
 The API container runs Alembic migrations on startup, then serves with Uvicorn. It listens on `$PORT` (default 8000) so the same image works locally and on Render.
 
